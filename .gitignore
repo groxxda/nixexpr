@@ -1,0 +1,6 @@
+# eclipse project
+.cproject
+.project
+.settings/
+*.o
+libexpr2
