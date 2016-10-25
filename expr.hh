@@ -61,6 +61,7 @@ namespace keyword {
     struct key_rec     : key<str_rec>     {};
     struct key_inherit : key<str_inherit> {};
     struct key_or      : key<str_or>      {};
+    struct key_ellipsis: pegtl::string<'.', '.', '.'> {};
 
     struct any         : key<str_any>     {};
 
