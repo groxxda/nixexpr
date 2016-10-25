@@ -77,6 +77,9 @@ namespace keyword {
     template<typename R>
     struct pad : pegtl::pad<R, sep> {};
 
+    // XXX: actually nix allows ' and - after the first char aswell
+    struct name : pegtl::seq<pegtl::not_at<keyword::any>, pegtl::identifier> {};
+
     struct grammar : pegtl::must<seps, pegtl::eof> {};
 
 
