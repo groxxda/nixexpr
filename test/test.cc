@@ -28,3 +28,8 @@ TEST_CASE("comments") {
     REQUIRE(parse("/* multi \n line \n string */"));
 }
 
+TEST_CASE("strings") {
+    REQUIRE(parse("\"shortstring\""));
+    REQUIRE(parse("''longstring''"));
+}
+

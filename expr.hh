@@ -80,6 +80,14 @@ namespace keyword {
     // XXX: actually nix allows ' and - after the first char aswell
     struct name : pegtl::seq<pegtl::not_at<keyword::any>, pegtl::identifier> {};
 
+    // XXX: add string interpolation
+    template<typename Q>
+    struct any_string : pegtl::if_must<Q, pegtl::until<Q>> {};
+    struct short_string : any_string<pegtl::one<'"'>> {};
+    // XXX: add prefix stripping
+    struct long_string : any_string<pegtl::string<'\'', '\''>> {};
+    struct string : pegtl::sor<short_string, long_string> {};
+
     struct grammar : pegtl::must<seps, pegtl::eof> {};
 
 
