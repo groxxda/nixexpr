@@ -66,7 +66,11 @@ namespace keyword {
 
 } // namespace keyword
 
-    struct grammar : pegtl::must<pegtl::eof> {};
+    struct line_comment : pegtl::disable<pegtl::one<'#'>, pegtl::until<pegtl::eolf>> {};
+    struct long_comment : pegtl::disable<pegtl::string<'/', '*'>, pegtl::until<pegtl::string<'*', '/'>>> {};
+    struct comment : pegtl::sor<line_comment, long_comment> {};
+
+    struct grammar : pegtl::must<comment, pegtl::eof> {};
 
 
 } // namespace parser

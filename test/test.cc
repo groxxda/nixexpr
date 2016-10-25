@@ -12,14 +12,19 @@
 
 using namespace nix::parser;
 
-template <typename... Args>
-bool parse(Args&&... args) {
-    return pegtl::parse_string<grammar>(std::forward<Args>(args)...);
+template <typename Str, typename... Args>
+bool parse(Str&& str, Args&&... args) {
+    return pegtl::parse_string<grammar>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
 }
 
 
 TEST_CASE("grammar analysis") {
     const size_t issues_found = pegtl::analyze<grammar>();
     REQUIRE(issues_found == 0);
+}
+
+TEST_CASE("comments") {
+    REQUIRE(parse("# single line string"));
+    REQUIRE(parse("/* multi \n line \n string */"));
 }
 
