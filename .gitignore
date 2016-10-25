@@ -4,3 +4,5 @@
 .settings/
 *.o
 libexpr2
+main
+test/test

@@ -1,4 +1,5 @@
 CXXFLAGS =	-O2 -g -Wall -fmessage-length=0 -std=gnu++11 $(INCLUDES)
+CXX = clang++
 
 OBJS = main.o
 
@@ -14,17 +15,22 @@ $(TARGET): $(OBJS)
 
 all:	$(TARGET)
 
-clean:
+clean: test_clean
 	rm -f $(OBJS) $(TARGET)
+
+test_clean:
+	rm -f $(TEST_OBJS) $(TEST_TARGET)
+
+TEST_TARGET = test/test
 
 test/test.o: expr.hh test/test.cc
 TEST_OBJS = test/test.o test/catch.o
 
-test/test: $(TEST_OBJS)
-	$(CXX) -o test/test $(TEST_OBJS)
+$(TEST_TARGET): $(TEST_OBJS)
+	$(CXX) -o $(TEST_TARGET) $(TEST_OBJS)
 
-test: test/test
-	test/test $(word 2, $(MAKECMDGOALS))
+test: $(TEST_TARGET)
+	$(TEST_TARGET) $(word 2, $(MAKECMDGOALS))
 
 %:
 	@:

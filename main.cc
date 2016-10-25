@@ -8,14 +8,10 @@
 
 int main( int argc, char ** argv )
 {
-    nix::parser::result_state result;
-    bool ok = pegtl::parse_string<nix::parser::grammar, pegtl::nothing, nix::parser::control>("2342", "(string)", result);
+    bool ok = pegtl::parse_string<nix::parser::grammar>("2342", "(string)");
     assert(ok);
-    std::cout << "ok=" << ok << " result=" << result.result << std::endl;
 
-    result.result.reset();
-    ok = pegtl::parse_string<nix::parser::grammar, pegtl::nothing, nix::parser::control>("\"Hello, hurz!\"", "(string)", result);
+    ok = pegtl::parse_string<nix::parser::grammar>("\"Hello, hurz!\"", "(string)");
     assert(ok);
-    std::cout << "ok=" << ok << " result=" << result.result << std::endl;
 
 }
