@@ -70,7 +70,13 @@ namespace keyword {
     struct long_comment : pegtl::disable<pegtl::string<'/', '*'>, pegtl::until<pegtl::string<'*', '/'>>> {};
     struct comment : pegtl::sor<line_comment, long_comment> {};
 
-    struct grammar : pegtl::must<comment, pegtl::eof> {};
+    struct sep : pegtl::sor<pegtl::ascii::space, comment> {};
+    struct seps : pegtl::star<sep> {};
+
+    template<typename R>
+    struct pad : pegtl::pad<R, sep> {};
+
+    struct grammar : pegtl::must<seps, pegtl::eof> {};
 
 
 } // namespace parser
