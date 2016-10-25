@@ -14,7 +14,7 @@ using namespace nix::parser;
 
 template <typename Str, typename... Args>
 bool parse(Str&& str, Args&&... args) {
-    return pegtl::parse_string<grammar>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
+    return pegtl::parse_string<grammar, pegtl::nothing, pegtl::tracer>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
 }
 
 
