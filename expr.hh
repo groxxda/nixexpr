@@ -88,7 +88,10 @@ namespace keyword {
     struct long_string : any_string<pegtl::string<'\'', '\''>> {};
     struct string : pegtl::sor<short_string, long_string> {};
 
-    struct grammar : pegtl::must<seps, pegtl::eof> {};
+
+    struct fixme : pegtl::sor<string, seps> {};
+
+    struct grammar : pegtl::must<fixme, pegtl::eof> {};
 
 
 } // namespace parser
