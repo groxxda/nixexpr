@@ -33,3 +33,6 @@ TEST_CASE("strings") {
     REQUIRE(parse("''longstring''"));
 }
 
+TEST_CASE("number") {
+    REQUIRE(parse("1337"));
+}
