@@ -104,11 +104,14 @@ namespace keyword {
     struct table_field_list : pegtl::plus<table_field, pad<pegtl::one<';'>>> {};
     struct table_constructor : pegtl::if_must<pegtl::one<'{'>, pegtl::pad_opt<table_field_list, sep>, pegtl::one<'}'>> {};
 
+    struct array_field_list : pegtl::list<expression, seps> {};
+    struct array_constructor : pegtl::if_must<pegtl::one<'['>, pegtl::pad_opt<array_field_list, sep>, pegtl::one<']'>> {};
 
     //FIXME: only to test
-    struct expression : pegtl::sor<string, number, table_constructor, name, seps> {};
+    struct expression : pegtl::sor<string, number, table_constructor, array_constructor, name> {};
 
-    struct grammar : pegtl::must<expression, pegtl::eof> {};
+    // XXX: remove 'seps': empty expressions are invalid
+    struct grammar : pegtl::must<pegtl::sor<expression, seps>, pegtl::eof> {};
 
 
 } // namespace parser

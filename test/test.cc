@@ -45,3 +45,11 @@ TEST_CASE("table") {
     REQUIRE(parse("{ inherit a; }"));
     REQUIRE(parse("{ inherit a b; }"));
 }
+
+TEST_CASE("array") {
+    REQUIRE(parse("[]"));
+    REQUIRE(parse("[ ]"));
+    REQUIRE(parse("[ 1 ]"));
+    REQUIRE(parse("[ 1 \"b\" ]"));
+    REQUIRE(parse("[ 1 \"b\" c ]"));
+}
