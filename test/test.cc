@@ -62,9 +62,7 @@ TEST_CASE("parameter") {
 TEST_CASE("parameter list") {
     REQUIRE(parse("{ }: "));
     REQUIRE(parse("{ a }: "));
-    REQUIRE(parse("{ a, }: "));
     REQUIRE(parse("{ a, b }: "));
-    REQUIRE(parse("{ a, b, }: "));
     REQUIRE(parse("{ ... }: "));
     REQUIRE(parse("{ a, ... }: "));
     REQUIRE(parse("{ a, b, ... }: "));
@@ -78,6 +76,15 @@ TEST_CASE("assert") {
 
 TEST_CASE("with") {
     REQUIRE(parse("with x;"));
+}
+
+TEST_CASE("let in") {
+    REQUIRE(parse("let x=1; in"));
+    REQUIRE(parse("let x = 1; in"));
+    REQUIRE(parse("let x = 1; y=2; in"));
+    REQUIRE(parse("let inherit x; in"));
+    REQUIRE(parse("let inherit(x) y; in"));
+    REQUIRE(parse("let inherit (x) y z; in"));
 }
 
 

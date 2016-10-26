@@ -92,14 +92,33 @@ namespace keyword {
 
     struct number : pegtl::plus<pegtl::digit> {};
 
+    // XXX: add string_attr
+    struct attr : pegtl::sor<name> {};
+    struct attrpath : pegtl::list_must<attr, pegtl::one<'.'>, sep> {};
+    // XXX: can be empty in original
+    struct attrs : pegtl::seq<attr, pegtl::star<pegtl::plus<sep>, attr>> {};
+
 
     struct expression;
 
-    // XXX: allow name ? default
-    struct argument_field_list_nonempty : pegtl::seq<pegtl::list_tail<name, pegtl::one<','>, sep>, seps, pegtl::opt<keyword::key_ellipsis>> {};
-    struct argument_field_list : pegtl::sor<keyword::key_ellipsis, argument_field_list_nonempty> {};
-    struct argument_field_constructor : pegtl::seq<pegtl::one<'{'>, pegtl::pad_opt<argument_field_list, sep>, pegtl::one<'}'>> {};
-    struct argument_constructor : pegtl::seq<pegtl::sor<name, argument_field_constructor>, seps, pegtl::if_must<pegtl::one<':'>, pegtl::plus<sep>>> {};
+    struct formal : pegtl::seq<name, seps, pegtl::opt<pegtl::if_must<pegtl::one<'?'>, seps, expression>>> {};
+//    struct formals : pegtl::seq<pegtl::star<formal, seps, pegtl::one<','>>, pegtl::opt<seps, keyword::key_ellipsis>> {};
+    struct formals_nonempty : pegtl::seq<pegtl::list<formal, pegtl::one<','>, sep>, pegtl::opt<seps, pegtl::if_must<pegtl::one<','>, seps, keyword::key_ellipsis>>> {};
+    struct formals : pegtl::sor<keyword::key_ellipsis, formals_nonempty> {};
+
+    // TODO: merge argument_set_prebind into argument_single
+    struct argument_single : pegtl::seq<name, pegtl::one<':'>> {};
+    struct argument_formals : pegtl::seq<pegtl::one<'{'>, pegtl::pad_opt<formals, sep>, pegtl::one<'}'>> {};
+    struct argument_set_prebind : pegtl::seq<name, seps, pegtl::one<'@'>, seps, argument_formals> {};
+    struct argument_set_postbind : pegtl::seq<argument_formals, pegtl::opt<seps, pegtl::one<'@'>, seps, name>> {};
+    struct argument_set : pegtl::seq<pegtl::sor<argument_set_prebind, argument_set_postbind>, pegtl::one<':'>> {};
+    struct arguments : pegtl::list<pegtl::sor<argument_set, argument_single>, seps> {};
+
+    struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<pad<pegtl::one<'='>>, expression>> {};
+    struct bind_inherit_from : pegtl::if_must<pegtl::seq<seps, pegtl::one<'('>>, pad<expression>, pegtl::one<')'>, pad<attrs>> {};
+    struct bind_inherit_attr : pegtl::if_must<sep, pad<attrs>> {};
+    struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::sor<bind_inherit_from, bind_inherit_attr>> {};
+    struct binds : pegtl::list<pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, pegtl::one<';'>>, seps> {};
 
     struct table_field_assign : pegtl::if_must<pegtl::seq<name, seps, pegtl::one<'='>>, seps, expression> {};
     // XXX: allow specifying source object with (...)
@@ -111,20 +130,25 @@ namespace keyword {
     struct array_field_list : pegtl::list<expression, seps> {};
     struct array_constructor : pegtl::if_must<pegtl::one<'['>, pegtl::pad_opt<array_field_list, sep>, pegtl::one<']'>> {};
 
+    struct bracket_expr : pegtl::if_must<pegtl::one<'('>, seps, expression, seps, pegtl::one<')'>> {};
+
+    struct function_call_head : pegtl::sor<name, bracket_expr> {};
+    //struct function_call : pegtl::seq<function_call_head, pegtl::plus<pegtl::until<pegtl::seq<seps, function_call_tail>, seps, variable_tail>>> {};
 
     struct assert : pegtl::if_must<keyword::key_assert, sep, expression, pad<pegtl::one<';'>>> {};
     struct with : pegtl::if_must<keyword::key_with, sep, expression, pad<pegtl::one<';'>>> {};
-    struct statement : pegtl::sor<assert, with> {};
+    struct let : pegtl::if_must<keyword::key_let, pegtl::plus<sep>, binds, pegtl::plus<sep>, keyword::key_in> {};
+    struct statement : pegtl::sor<assert, with, let, arguments> {};
     struct statement_list : pegtl::star<statement> {};
 
 
 
 
     //FIXME: only to test
-    struct expression : pegtl::sor<string, number, pegtl::plus<argument_constructor>, table_constructor, array_constructor, name> {};
+    struct expression : pegtl::sor<string, number, table_constructor, array_constructor, name> {};
 
     // XXX: remove 'seps': empty expressions are invalid
-    struct grammar : pegtl::must<seps, statement_list, pegtl::sor<expression, seps>, pegtl::eof> {};
+    struct grammar : pegtl::must<seps,statement_list, pegtl::sor<expression, seps>, pegtl::eof> {};
 
 
 } // namespace parser
