@@ -94,8 +94,10 @@ namespace keyword {
     struct expression;
 
     // XXX: allow name ? default
-    struct name_list : pegtl::list<name, pegtl::one<','>, sep> {};
-
+    struct argument_field_list_nonempty : pegtl::seq<pegtl::list_tail<name, pegtl::one<','>, sep>, seps, pegtl::opt<keyword::key_ellipsis>> {};
+    struct argument_field_list : pegtl::sor<keyword::key_ellipsis, argument_field_list_nonempty> {};
+    struct argument_field_constructor : pegtl::seq<pegtl::one<'{'>, pegtl::pad_opt<argument_field_list, sep>, pegtl::one<'}'>> {};
+    struct argument_constructor : pegtl::seq<pegtl::sor<name, argument_field_constructor>, seps, pegtl::if_must<pegtl::one<':'>, pegtl::plus<sep>>> {};
 
     struct table_field_assign : pegtl::if_must<pegtl::seq<name, seps, pegtl::one<'='>>, seps, expression> {};
     // XXX: allow specifying source object with (...)
@@ -107,8 +109,10 @@ namespace keyword {
     struct array_field_list : pegtl::list<expression, seps> {};
     struct array_constructor : pegtl::if_must<pegtl::one<'['>, pegtl::pad_opt<array_field_list, sep>, pegtl::one<']'>> {};
 
+
+
     //FIXME: only to test
-    struct expression : pegtl::sor<string, number, table_constructor, array_constructor, name> {};
+    struct expression : pegtl::sor<string, number, pegtl::plus<argument_constructor>, table_constructor, array_constructor, name> {};
 
     // XXX: remove 'seps': empty expressions are invalid
     struct grammar : pegtl::must<pegtl::sor<expression, seps>, pegtl::eof> {};

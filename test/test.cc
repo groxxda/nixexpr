@@ -53,3 +53,19 @@ TEST_CASE("array") {
     REQUIRE(parse("[ 1 \"b\" ]"));
     REQUIRE(parse("[ 1 \"b\" c ]"));
 }
+
+TEST_CASE("parameter") {
+    REQUIRE(parse("a: "));
+    REQUIRE(parse("a: b: "));
+}
+
+TEST_CASE("parameter list") {
+    REQUIRE(parse("{ }: "));
+    REQUIRE(parse("{ a }: "));
+    REQUIRE(parse("{ a, }: "));
+    REQUIRE(parse("{ a, b }: "));
+    REQUIRE(parse("{ a, b, }: "));
+    REQUIRE(parse("{ ... }: "));
+    REQUIRE(parse("{ a, ... }: "));
+    REQUIRE(parse("{ a, b, ... }: "));
+}
