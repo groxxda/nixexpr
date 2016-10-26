@@ -90,6 +90,10 @@ namespace keyword {
 
     struct number : pegtl::plus<pegtl::digit> {};
 
+
+    // XXX: allow name ? default
+    struct name_list : pegtl::list<name, pegtl::one<','>, sep> {};
+
     struct fixme : pegtl::sor<string, number, seps> {};
 
     struct grammar : pegtl::must<fixme, pegtl::eof> {};
