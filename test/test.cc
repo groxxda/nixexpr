@@ -69,3 +69,12 @@ TEST_CASE("parameter list") {
     REQUIRE(parse("{ a, ... }: "));
     REQUIRE(parse("{ a, b, ... }: "));
 }
+
+TEST_CASE("assert") {
+    REQUIRE(parse("assert true;"));
+    REQUIRE(parse("assert 1;"));
+    REQUIRE(parse("assert true;assert false ;"));
+}
+
+
+

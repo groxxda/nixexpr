@@ -110,12 +110,18 @@ namespace keyword {
     struct array_constructor : pegtl::if_must<pegtl::one<'['>, pegtl::pad_opt<array_field_list, sep>, pegtl::one<']'>> {};
 
 
+    struct assert : pegtl::if_must<keyword::key_assert, sep, expression, pad<pegtl::one<';'>>> {};
+    struct statement : pegtl::sor<assert> {};
+    struct statement_list : pegtl::star<statement> {};
+
+
+
 
     //FIXME: only to test
     struct expression : pegtl::sor<string, number, pegtl::plus<argument_constructor>, table_constructor, array_constructor, name> {};
 
     // XXX: remove 'seps': empty expressions are invalid
-    struct grammar : pegtl::must<pegtl::sor<expression, seps>, pegtl::eof> {};
+    struct grammar : pegtl::must<seps, statement_list, pegtl::sor<expression, seps>, pegtl::eof> {};
 
 
 } // namespace parser
