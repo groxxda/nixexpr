@@ -111,7 +111,8 @@ namespace keyword {
 
 
     struct assert : pegtl::if_must<keyword::key_assert, sep, expression, pad<pegtl::one<';'>>> {};
-    struct statement : pegtl::sor<assert> {};
+    struct with : pegtl::if_must<keyword::key_with, sep, expression, pad<pegtl::one<';'>>> {};
+    struct statement : pegtl::sor<assert, with> {};
     struct statement_list : pegtl::star<statement> {};
 
 

@@ -76,5 +76,9 @@ TEST_CASE("assert") {
     REQUIRE(parse("assert true;assert false ;"));
 }
 
+TEST_CASE("with") {
+    REQUIRE(parse("with x;"));
+}
+
 
 
