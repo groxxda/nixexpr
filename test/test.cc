@@ -36,3 +36,12 @@ TEST_CASE("strings") {
 TEST_CASE("number") {
     REQUIRE(parse("1337"));
 }
+
+TEST_CASE("table") {
+    REQUIRE(parse("{ }"));
+    REQUIRE(parse("{ a = 1; }"));
+    REQUIRE(parse("{ a = 1; b = \"c\"; }"));
+    REQUIRE(parse("{ a = 1; b = \"c\"; c = foobar; }"));
+    REQUIRE(parse("{ inherit a; }"));
+    REQUIRE(parse("{ inherit a b; }"));
+}

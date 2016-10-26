@@ -91,12 +91,24 @@ namespace keyword {
     struct number : pegtl::plus<pegtl::digit> {};
 
 
+    struct expression;
+
     // XXX: allow name ? default
     struct name_list : pegtl::list<name, pegtl::one<','>, sep> {};
 
-    struct fixme : pegtl::sor<string, number, seps> {};
 
-    struct grammar : pegtl::must<fixme, pegtl::eof> {};
+    struct table_field_assign : pegtl::if_must<pegtl::seq<name, seps, pegtl::one<'='>>, seps, expression> {};
+    // XXX: allow specifying source object with (...)
+    struct table_field_inherit : pegtl::if_must<keyword::key_inherit, seps, pegtl::list<name, seps>> {};
+    struct table_field : pegtl::sor<table_field_assign, table_field_inherit> {};
+    struct table_field_list : pegtl::plus<table_field, pad<pegtl::one<';'>>> {};
+    struct table_constructor : pegtl::if_must<pegtl::one<'{'>, pegtl::pad_opt<table_field_list, sep>, pegtl::one<'}'>> {};
+
+
+    //FIXME: only to test
+    struct expression : pegtl::sor<string, number, table_constructor, name, seps> {};
+
+    struct grammar : pegtl::must<expression, pegtl::eof> {};
 
 
 } // namespace parser
