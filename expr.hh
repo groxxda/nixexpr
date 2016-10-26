@@ -46,11 +46,16 @@ namespace keyword {
     struct str_rec     : pegtl::string<'r', 'e', 'c'>                     {};
     struct str_inherit : pegtl::string<'i', 'n', 'h', 'e', 'r', 'i', 't'> {};
     struct str_or      : pegtl::string<'o', 'r'>                          {};
+    struct str_ellipsis: pegtl::string<'.', '.', '.'>                     {};
+    struct str_true    : pegtl::string<'t', 'r', 'u', 'e'>                {};
+    struct str_false   : pegtl::string<'f', 'a', 'l', 's', 'e'>           {};
 
-    struct str_any     : pegtl::sor<str_if, str_then, str_else, str_assert, str_with, str_let, str_in, str_rec, str_inherit, str_or> {};
+    struct str_any     : pegtl::sor<str_if, str_then, str_else, str_assert, str_with, str_let, str_in, str_rec, str_inherit, str_or, str_true, str_false> {};
 
+    // TODO: we might be able to shortcut if we test for known separators -- also is this even needed?
     template<typename Key>
-    struct key         : pegtl::seq<Key, pegtl::not_at<pegtl::identifier_other>> {};
+    //struct key         : pegtl::seq<Key, pegtl::not_at<pegtl::identifier_other>> {};
+    struct key         : Key              {};
 
     struct key_if      : key<str_if>      {};
     struct key_then    : key<str_then>    {};
@@ -62,8 +67,9 @@ namespace keyword {
     struct key_rec     : key<str_rec>     {};
     struct key_inherit : key<str_inherit> {};
     struct key_or      : key<str_or>      {};
-    struct key_ellipsis: pegtl::string<'.', '.', '.'> {};
-
+    struct key_ellipsis: key<str_ellipsis>{};
+    struct key_true    : key<str_true>    {};
+    struct key_false   : key<str_false>   {};
     struct any         : key<str_any>     {};
 
 } // namespace keyword
