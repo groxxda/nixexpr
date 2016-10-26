@@ -52,6 +52,7 @@ namespace keyword {
     template<typename Key>
     struct key         : pegtl::seq<Key, pegtl::not_at<pegtl::identifier_other>> {};
 
+    struct key_if      : key<str_if>      {};
     struct key_then    : key<str_then>    {};
     struct key_else    : key<str_else>    {};
     struct key_assert  : key<str_assert>  {};
