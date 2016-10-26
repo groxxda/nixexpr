@@ -98,6 +98,7 @@ namespace keyword {
     struct string : pegtl::sor<short_string, long_string> {};
 
     struct number : pegtl::plus<pegtl::digit> {};
+    struct boolean : pegtl::sor<keyword::key_true, keyword::key_false> {};
 
     // XXX: add string_attr
     struct attr : pegtl::sor<name> {};
@@ -148,11 +149,16 @@ namespace keyword {
     struct statement : pegtl::sor<assert, with, let, arguments> {};
     struct statement_list : pegtl::star<statement> {};
 
+    // XXX: if[]!=[]then[]else[] should be valid....
+    struct if_separator : pegtl::sor<pegtl::at<pegtl::one<'{', '(', '['>>, pegtl::plus<sep>> {};
+    struct if_then_else : pegtl::seq<keyword::key_if, if_separator, expression, pegtl::plus<sep>, keyword::key_then, if_separator, expression, pegtl::plus<sep>, keyword::key_else, if_separator, expression> {};
 
 
+    struct negate_expression : pegtl::if_must<pegtl::plus<padr<pegtl::one<'!'>>>, pegtl::sor<boolean, bracket_expr>> {};
+    struct boolean_expression : pegtl::sor<boolean, negate_expression> {};
 
     //FIXME: only to test
-    struct expression : pegtl::sor<string, number, table_constructor, array_constructor, name> {};
+    struct expression : pegtl::sor<if_then_else, boolean_expression, boolean, string, number, table_constructor, array_constructor, name> {};
 
     // XXX: remove 'seps': empty expressions are invalid
     struct grammar : pegtl::must<seps,statement_list, pegtl::sor<expression, seps>, pegtl::eof> {};

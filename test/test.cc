@@ -87,5 +87,19 @@ TEST_CASE("let in") {
     REQUIRE(parse("let inherit (x) y z; in"));
 }
 
+TEST_CASE("if then else") {
+    REQUIRE(parse("if true then \"yes\" else \"false\""));
+    //REQUIRE(parse("if(1==1)then(\"yes\")else(\"false\")"));
+}
+
+TEST_CASE("boolean expression") {
+    REQUIRE(parse("true"));
+    REQUIRE(parse("false"));
+    REQUIRE(parse("!true"));
+    REQUIRE(parse("!\ttrue"));
+    REQUIRE(parse("!(true)"));
+    REQUIRE(parse("!(\"a\")"));
+}
+
 
 
