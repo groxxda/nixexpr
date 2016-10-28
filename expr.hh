@@ -183,9 +183,7 @@ namespace keyword {
     struct with : pegtl::if_must<keyword::key_with, pad<expression>, padr<pegtl::one<';'>>> {};
     struct let : pegtl::if_must<keyword::key_let, pad<pegtl::opt<binds>>, padr<keyword::key_in>> {};
     struct statement : pegtl::if_must<pegtl::sor<assert, with, let, arguments>, seps, expression> {};
-    struct expr_import;
-    struct expr_if;
-    struct statement_list : pegtl::sor<statement, expr_import, expr_if> {};
+    struct statement_list;
 
 
     // XXX: be more specific, support []!=[], support function call without parenthesis
@@ -201,16 +199,16 @@ namespace keyword {
     struct variable_tail_or : pegtl::if_must<padr<keyword::key_or>, expression> {};
     struct variable_tail : pegtl::seq<padr<pegtl::one<'.'>>, padr<pegtl::sor<attr, string, dollarcurly_expr>>, pegtl::opt<variable_tail_or>> {};
 
-    struct unary_operators : pegtl::sor<op_one<'-', '>'>, op_one<'!', '='>> {};
+    //struct unary_operators : pegtl::sor<op_one<'-', '>'>, op_one<'!', '='>> {};
 
     struct expr_ten;
     struct expr_thirteen : pegtl::seq<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr, statement_list>, pegtl::star<seps, variable_tail>> {};
     struct expr_twelve : pegtl::sor<boolean, number, string, uri, expr_thirteen, array_constructor, path, spath> {};
     struct expr_eleven : pegtl::seq<expr_twelve, seps, pegtl::opt<expr_ten, seps>> {};
-    struct unary_apply : pegtl::if_must<unary_operators, seps, expr_ten, seps> {};
-    struct expr_ten : pegtl::sor<unary_apply, expr_eleven> {};
+    //struct unary_apply : pegtl::if_must<unary_operators, seps, expr_ten, seps> {};
+    struct expr_ten : expr_eleven {};//pegtl::sor<unary_apply, expr_eleven> {};
 
-    struct expr_ninesix : non_assoc<expr_ten, op_one<'-', '>'>> {};
+    struct expr_ninesix : pegtl::seq<pegtl::star<padr<op_one<'-', '>'>>>, expr_ten> {};
 
     struct expr_ninefour : non_assoc<expr_ninesix, pegtl::one<'?'>> {};
 
@@ -222,9 +220,9 @@ namespace keyword {
     struct operators_eight : pegtl::sor<pegtl::one<'+'>, op_one<'-', '>'>> {};
     struct expr_eight : left_assoc<expr_nine, operators_eight> {};
 
-    //struct expr_five : left_assoc<expr_eight, pegtl::one<'!'>> {};
+    struct expr_five : pegtl::seq<pegtl::star<padr<pegtl::one<'!'>>>, expr_eight> {};
 
-    struct expr_four : right_assoc<expr_eight, pegtl::two<'/'>> {};
+    struct expr_four : right_assoc<expr_five, pegtl::two<'/'>> {};
 
     struct operators_three : pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>> {};
     struct expr_three : left_assoc<expr_four, operators_three> {};
@@ -245,6 +243,7 @@ namespace keyword {
 
     struct expression : pegtl::sor<statement_list, expr_op> {};
 
+    struct statement_list : pegtl::sor<statement, expr_import, expr_if> {};
 
     //FIXME: only to test
     //struct expression : pegtl::sor<if_then_else, boolean_expression, boolean, string, number, table_constructor, array_constructor, name> {};
