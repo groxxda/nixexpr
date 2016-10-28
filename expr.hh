@@ -51,7 +51,7 @@ struct short_string_escaped : pegtl::seq<pegtl::one<'\\'>, pegtl::one<'"', '$', 
 struct short_string_content : pegtl::star<pegtl::sor<short_string_escaped, dollarcurly_expr, pegtl::not_one<'"'>>> {};
 struct short_string : pegtl::if_must<pegtl::one<'"'>, short_string_content, pegtl::one<'"'>> {};
 // XXX: add prefix stripping
-struct long_string_escaped : pegtl::seq<pegtl::two<'\''>, pegtl::sor<pegtl::one<'\''>, pegtl::one<'$'>>> {};
+struct long_string_escaped : pegtl::seq<pegtl::two<'\''>, pegtl::sor<pegtl::one<'\''>, pegtl::one<'$'>, pegtl::seq<pegtl::one<'\\'>, pegtl::one<'n', 'r', 't'>>>> {};
 struct long_string_content : pegtl::star<pegtl::sor<long_string_escaped, dollarcurly_expr, pegtl::seq<pegtl::not_at<pegtl::two<'\''>>, pegtl::any>>> {};
 struct long_string : pegtl::if_must<pegtl::two<'\''>, long_string_content, pegtl::two<'\''>> {};
 //struct long_string : any_string<op_two<'\'', '\'', '\''>> {};
@@ -92,8 +92,8 @@ namespace keyword {
     struct str_false   : pegtl::string<'f', 'a', 'l', 's', 'e'>           {};
     struct str_import  : pegtl::string<'i', 'm', 'p', 'o', 'r', 't'>      {};
 
-    // we have to allow legacy attrname or...
-    struct str_forbidden:pegtl::sor<str_if, str_then, str_else, str_assert, str_with, str_let, str_in, str_rec, str_inherit, str_true, str_false, str_import> {};
+    // we have to allow legacy attrname or... cran has an attribute named import
+    struct str_forbidden:pegtl::sor<str_if, str_then, str_else, str_assert, str_with, str_let, str_in, str_rec, str_inherit, str_true, str_false> {};
     struct str_any     : pegtl::sor<str_forbidden, str_or> {};
 
     template<typename Key>
@@ -149,7 +149,7 @@ namespace keyword {
     struct formals : pegtl::sor<keyword::key_ellipsis, formals_nonempty> {};
 
     // TODO: merge prefix of argument_set_prebind and argument_single
-    struct argument_single : pegtl::seq<padr<name>, pegtl::one<':'>, padr<pegtl::sor<sep, pegtl::not_at<pegtl::uri::hier_part>>>> {};
+    struct argument_single : pegtl::seq<padr<name>, pegtl::one<':'>, padr<pegtl::sor<sep, pegtl::at<pegtl::one<'[', '(', '{','!'>>>>> {};
     struct argument_formals : pegtl::seq<pegtl::one<'{'>, pegtl::pad_opt<formals, sep>, pegtl::one<'}'>> {};
     struct argument_set_prebind : pegtl::seq<padr<name>, pegtl::if_must<padr<pegtl::one<'@'>>, padr<argument_formals>>> {};
     struct argument_set_postbind : pegtl::seq<padr<argument_formals>, pegtl::opt<padr<pegtl::one<'@'>>, padr<name>>> {};
@@ -158,7 +158,7 @@ namespace keyword {
 
     struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<pad<pegtl::one<'='>>, expression>> {};
     struct bind_inherit_from : pegtl::if_must<pegtl::seq<seps, pegtl::one<'('>>, pad<expression>, pegtl::one<')'>, pegtl::opt<pad<attrs>>> {};
-    struct bind_inherit_attr : pegtl::if_must<sep, pad<attrs>> {};
+    struct bind_inherit_attr : pegtl::opt<pad<attrs>> {};
     struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::sor<bind_inherit_from, bind_inherit_attr>> {};
     struct binds : pegtl::list<pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, pegtl::one<';'>>, seps> {};
 
@@ -238,7 +238,7 @@ namespace keyword {
 
 
     // XXX: if[]!=[]then[]else[] should be valid....
-    struct if_separator : pegtl::sor<pegtl::at<pegtl::one<'{', '(', '['>>, pegtl::plus<sep>> {};
+    struct if_separator : pegtl::sor<pegtl::at<pegtl::one<'{', '(', '[', '"'>>, pegtl::plus<sep>> {};
     struct expr_if : pegtl::if_must<keyword::key_if, if_separator, expression, seps, keyword::key_then, if_separator, expression, seps, keyword::key_else, if_separator, expression> {};
 
     struct expr_import : pegtl::if_must<padr<keyword::key_import>, expression> {};
