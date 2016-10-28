@@ -157,7 +157,7 @@ namespace keyword {
     struct arguments : pegtl::plus<pegtl::sor<argument_set, argument_single>> {};
 
     struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<pad<pegtl::one<'='>>, expression>> {};
-    struct bind_inherit_from : pegtl::if_must<pegtl::seq<seps, pegtl::one<'('>>, pad<expression>, pegtl::one<')'>, pad<attrs>> {};
+    struct bind_inherit_from : pegtl::if_must<pegtl::seq<seps, pegtl::one<'('>>, pad<expression>, pegtl::one<')'>, pegtl::opt<pad<attrs>>> {};
     struct bind_inherit_attr : pegtl::if_must<sep, pad<attrs>> {};
     struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::sor<bind_inherit_from, bind_inherit_attr>> {};
     struct binds : pegtl::list<pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, pegtl::one<';'>>, seps> {};
@@ -183,7 +183,9 @@ namespace keyword {
     struct with : pegtl::if_must<keyword::key_with, pad<expression>, padr<pegtl::one<';'>>> {};
     struct let : pegtl::if_must<keyword::key_let, pad<pegtl::opt<binds>>, padr<keyword::key_in>> {};
     struct statement : pegtl::if_must<pegtl::sor<assert, with, let, arguments>, seps, expression> {};
-    struct statement_list : /*pegtl::star<*/statement/*>*/ {};
+    struct expr_import;
+    struct expr_if;
+    struct statement_list : pegtl::sor<statement, expr_import, expr_if> {};
 
 
     // XXX: be more specific, support []!=[], support function call without parenthesis
@@ -202,7 +204,7 @@ namespace keyword {
     struct unary_operators : pegtl::sor<op_one<'-', '>'>, op_one<'!', '='>> {};
 
     struct expr_ten;
-    struct expr_thirteen : pegtl::seq<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr>, pegtl::star<seps, variable_tail>> {};
+    struct expr_thirteen : pegtl::seq<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr, statement_list>, pegtl::star<seps, variable_tail>> {};
     struct expr_twelve : pegtl::sor<boolean, number, string, uri, expr_thirteen, array_constructor, path, spath> {};
     struct expr_eleven : pegtl::seq<expr_twelve, seps, pegtl::opt<expr_ten, seps>> {};
     struct unary_apply : pegtl::if_must<unary_operators, seps, expr_ten, seps> {};
@@ -241,7 +243,7 @@ namespace keyword {
 
     struct expr_import : pegtl::if_must<padr<keyword::key_import>, expression> {};
 
-    struct expression : pegtl::sor<statement_list, expr_import, expr_if, expr_op> {};
+    struct expression : pegtl::sor<statement_list, expr_op> {};
 
 
     //FIXME: only to test
