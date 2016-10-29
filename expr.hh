@@ -170,9 +170,6 @@ namespace keyword {
     struct dollarcurly_expr : pegtl::if_must<pegtl::string<'$', '{'>, pad<expression>, pegtl::one<'}'>> {};
     struct bracket_expr : pegtl::if_must<pegtl::one<'('>, pad<expression>, pegtl::one<')'>> {};
 
-    //struct function_call_head : pegtl::sor<name, bracket_expr> {};
-    //struct function_call : pegtl::seq<function_call_head, pegtl::plus<pegtl::until<pegtl::seq<seps, function_call_tail>, seps, variable_tail>>> {};
-
     struct assert : pegtl::if_must<keyword::key_assert, expression, padr<pegtl::one<';'>>> {};
     struct with : pegtl::if_must<keyword::key_with, expression, padr<pegtl::one<';'>>> {};
     struct let : pegtl::if_must<keyword::key_let, pegtl::opt<binds>, keyword::key_in> {};
@@ -180,27 +177,16 @@ namespace keyword {
     struct statement_list;
 
 
-    // XXX: be more specific, support []!=[], support function call without parenthesis
-    //struct negate_expression : pegtl::if_must<pegtl::plus<padr<pegtl::one<'!'>>>, pegtl::sor<boolean, bracket_expr>> {};
-    //struct boolean_expression : pegtl::sor<boolean, negate_expression> {};
-    //struct boolean_expression : pegtl::seq<pegtl::star<padr<pegtl::one<'!'>>>, pegtl::sor<boolean, bracket_expr>> {};
-
-    //struct negate_expression : pegtl::seq<pegtl::star<padr<
-
 
     struct expr_thirteen;
 
     struct variable_tail_or : pegtl::if_must<keyword::key_or, expression> {};
     struct variable_tail : pegtl::seq<padr<pegtl::one<'.'>>, padr<pegtl::sor<attr, string, dollarcurly_expr>>, pegtl::opt<variable_tail_or>> {};
 
-    //struct unary_operators : pegtl::sor<op_one<'-', '>'>, op_one<'!', '='>> {};
-
     struct expr_ten;
     struct expr_thirteen : pegtl::seq<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr, statement_list>, pegtl::star<seps, variable_tail>> {};
     struct expr_twelve : pegtl::sor<boolean, number, string, uri, expr_thirteen, array_constructor, path, spath> {};
-    struct expr_eleven : pegtl::seq<expr_twelve, seps, pegtl::opt<expr_ten, seps>> {};
-    //struct unary_apply : pegtl::if_must<unary_operators, seps, expr_ten, seps> {};
-    struct expr_ten : expr_eleven {};//pegtl::sor<unary_apply, expr_eleven> {};
+    struct expr_ten : pegtl::seq<expr_twelve, seps, pegtl::opt<expr_ten, seps>> {};
 
     struct expr_ninesix : pegtl::seq<pegtl::star<padr<op_one<'-', '>'>>>, expr_ten> {};
 
@@ -237,11 +223,6 @@ namespace keyword {
 
     struct statement_list : pegtl::sor<statement, expr_import, expr_if> {};
 
-    //FIXME: only to test
-    //struct expression : pegtl::sor<if_then_else, boolean_expression, boolean, string, number, table_constructor, array_constructor, name> {};
-
-
-    // XXX: remove 'seps': empty expressions are invalid
     struct grammar : pegtl::must<seps, expression, pegtl::eof> {};
 
 
