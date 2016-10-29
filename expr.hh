@@ -170,13 +170,14 @@ namespace keyword {
     struct variable_tail : pegtl::seq<padr<pegtl::one<'.'>>, padr<pegtl::sor<attr, string, dollarcurly_expr>>, pegtl::opt<variable_tail_or>> {};
 
     struct expr_select : pegtl::seq<padr<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr>>, pegtl::star<variable_tail>> {};
-    struct expr_simple : padr<pegtl::sor<boolean, number, string, path, uri, array_constructor, spath>> {};
-    struct expr_applying_tail : pegtl::sor<expr_simple, expr_select> {};
+    struct expr_simple : pegtl::sor<boolean, number, string, path, uri, array_constructor, spath> {};
+    struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select> {};
     struct expr_applying : pegtl::seq<expr_select, pegtl::star<pegtl::not_at<pegtl::one<';', ','>>, expr_applying_tail>> {};
-    struct expr_apply : pegtl::if_then_else<expr_simple, pegtl::success, expr_applying> {};
+    template<typename T = expr_simple>
+    struct expr_apply : pegtl::if_then_else<padr<T>, pegtl::success, expr_applying> {};
 
 
-    struct expr_negate : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply> {};
+    struct expr_negate : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply<>> {};
 
     struct expr_attrtest : pegtl::seq<expr_negate, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, attrpath>>> {};
 
