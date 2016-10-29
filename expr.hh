@@ -124,6 +124,7 @@ namespace keyword {
     struct spath : pegtl::seq<pegtl::one<'<'>, pegtl::plus<path_char>, pegtl::star<pegtl::one<'/'>, pegtl::plus<path_char>> , pegtl::one<'>'>> {};
 
     // XXX: we cannot allow ; in uris...
+    // until<':',sor<reserved, unreserved>>
     struct uri : pegtl::seq<pegtl::uri::scheme, pegtl::one<':'>, pegtl::star<pegtl::not_at<pegtl::sor<pegtl::one<';'>, pegtl::space, pegtl::eolf>>, pegtl::any>> {};
 
     struct number : pegtl::plus<pegtl::digit> {};
@@ -151,7 +152,7 @@ namespace keyword {
     struct argument_set : pegtl::seq<pegtl::sor<argument_set_prebind, argument_set_postbind>, padr<pegtl::one<':'>>> {};
     struct arguments : pegtl::plus<pegtl::sor<argument_set, argument_single>> {};
 
-    struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<pad<pegtl::one<'='>>, expression>> {};
+    struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<padr<pegtl::one<'='>>, expression>> {};
     struct bind_inherit_attrnames : pegtl::star<attrtail> {};
     struct bind_inherit_from : pegtl::opt<pegtl::if_must<padr<pegtl::one<'('>>, expression, padr<pegtl::one<')'>>>> {};
     struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::opt<bind_inherit_from>, bind_inherit_attrnames> {};
@@ -159,7 +160,8 @@ namespace keyword {
 
     struct table_constructor : pegtl::if_must<pegtl::seq<pegtl::opt<keyword::key_rec>, padr<pegtl::one<'{'>>>, pegtl::until<pegtl::one<'}'>, binds>> {};
 
-    struct array_constructor : pegtl::if_must<padr<pegtl::one<'['>>, pegtl::until<pegtl::one<']'>, expr_select>> {};
+    struct expr_applying_tail;
+    struct array_constructor : pegtl::if_must<padr<pegtl::one<'['>>, pegtl::until<pegtl::one<']'>, expr_applying_tail>> {};
 
     struct dollarcurly_expr : pegtl::if_must<padr<pegtl::string<'$', '{'>>, expression, pegtl::one<'}'>> {};
     struct bracket_expr : pegtl::if_must<padr<pegtl::one<'('>>, expression, pegtl::one<')'>> {};
@@ -167,16 +169,15 @@ namespace keyword {
 
 
 
-
-    struct expr_thirteen;
-
-    struct variable_tail_or : pegtl::if_must<keyword::key_or, expression> {};
+    struct variable_tail_or : pegtl::if_must<keyword::key_or, expr_applying_tail> {};
     struct variable_tail : pegtl::seq<padr<pegtl::one<'.'>>, padr<pegtl::sor<attr, string, dollarcurly_expr>>, pegtl::opt<variable_tail_or>> {};
 
-    struct expr_thirteen : pegtl::seq<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr>, pegtl::star<variable_tail>> {};
-    // TODO: optimize double padding
-    struct expr_select : padr<pegtl::sor<boolean, number, string, uri, expr_thirteen, array_constructor, path, spath>> {};
-    struct expr_apply : pegtl::seq<expr_select, pegtl::if_then_else<pegtl::at<pegtl::one<';'>>, pegtl::success, pegtl::opt<expr_apply>>> {};
+    struct expr_select : pegtl::seq<padr<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr>>, pegtl::star<variable_tail>> {};
+    struct expr_simple : padr<pegtl::sor<boolean, number, string, path, uri, array_constructor, spath>> {};
+    struct expr_applying_tail : pegtl::sor<expr_simple, expr_select> {};
+    template<typename S>
+    struct expr_applying : pegtl::seq<S, pegtl::star<pegtl::not_at<pegtl::one<';', ','>>, expr_applying_tail>> {};
+    struct expr_apply : pegtl::if_then_else<expr_simple, pegtl::success, expr_applying<expr_select>> {};
 
 
     struct expr_negate : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply> {};
@@ -208,14 +209,15 @@ namespace keyword {
 
     struct expr_if : pegtl::if_must<keyword::key_if, expression, keyword::key_then, expression, keyword::key_else, expression> {};
 
-    struct expr_import : pegtl::if_must<keyword::key_import, expression> {};
+    // TODO: allow importing uri
+    //struct expr_import : pegtl::if_must<keyword::key_import, padr<pegtl::sor<path, spath, string, name, expr_select>>, pegtl::opt<expr_applying<expr_applying_tail>>> {};
 
 
     struct assert : pegtl::if_must<keyword::key_assert, expression, padr<pegtl::one<';'>>> {};
     struct with : pegtl::if_must<keyword::key_with, expression, padr<pegtl::one<';'>>> {};
     struct let : pegtl::if_must<keyword::key_let, pegtl::until<keyword::key_in, binds>> {};
     struct statement : pegtl::if_must<pegtl::sor<assert, with, let, arguments>, expression> {};
-    struct statement_list : pegtl::sor<statement, expr_import, expr_if> {};
+    struct statement_list : pegtl::sor<statement, /*expr_import,*/ expr_if> {};
 
     struct expression : pegtl::sor<statement_list, expr_impl> {};
 
