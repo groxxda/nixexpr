@@ -157,11 +157,12 @@ namespace keyword {
 
     struct table_constructor : pegtl::if_must<pegtl::seq<pegtl::opt<keyword::key_rec>, padr<pegtl::one<'{'>>>, pegtl::opt<binds>, pegtl::one<'}'>> {};
 
-    struct array_field_list : pegtl::plus<expression> {};
-    struct array_constructor : pegtl::if_must<pegtl::one<'['>, pegtl::pad_opt<array_field_list, sep>, pegtl::one<']'>> {};
+    // TODO: bracket_expr, dollar_curly, atomics
+    struct array_field_list : pegtl::star<expression> {};
+    struct array_constructor : pegtl::if_must<padr<pegtl::one<'['>>, array_field_list, pegtl::one<']'>> {};
 
-    struct dollarcurly_expr : pegtl::if_must<pegtl::string<'$', '{'>, pad<expression>, pegtl::one<'}'>> {};
-    struct bracket_expr : pegtl::if_must<pegtl::one<'('>, pad<expression>, pegtl::one<')'>> {};
+    struct dollarcurly_expr : pegtl::if_must<padr<pegtl::string<'$', '{'>>, expression, pegtl::one<'}'>> {};
+    struct bracket_expr : pegtl::if_must<padr<pegtl::one<'('>>, expression, pegtl::one<')'>> {};
 
     struct assert : pegtl::if_must<keyword::key_assert, expression, padr<pegtl::one<';'>>> {};
     struct with : pegtl::if_must<keyword::key_with, expression, padr<pegtl::one<';'>>> {};
