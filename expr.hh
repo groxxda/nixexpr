@@ -54,7 +54,6 @@ struct short_string : pegtl::if_must<pegtl::one<'"'>, short_string_content, pegt
 struct long_string_escaped : pegtl::seq<pegtl::two<'\''>, pegtl::sor<pegtl::one<'\''>, pegtl::one<'$'>, pegtl::seq<pegtl::one<'\\'>, pegtl::one<'n', 'r', 't'>>>> {};
 struct long_string_content : pegtl::star<pegtl::sor<long_string_escaped, dollarcurly_expr, pegtl::seq<pegtl::not_at<pegtl::two<'\''>>, pegtl::any>>> {};
 struct long_string : pegtl::if_must<pegtl::two<'\''>, long_string_content, pegtl::two<'\''>> {};
-//struct long_string : any_string<op_two<'\'', '\'', '\''>> {};
 struct string : pegtl::sor<short_string, long_string> {};
 
 struct sep : pegtl::sor<pegtl::ascii::space, comment> {};
@@ -66,11 +65,11 @@ template<typename R>
 struct padr : pegtl::seq<R, seps> {};
 
 template<typename S, typename O>
-struct left_assoc : pegtl::seq<S, seps, pegtl::star<pegtl::if_must<O, seps, S, seps>>> {};
+struct left_assoc : pegtl::seq<S, pegtl::star<pegtl::if_must<O, seps, S>>> {};
 template<typename S, typename O>
-struct right_assoc :  pegtl::seq< S, seps, pegtl::opt< pegtl::if_must< O, seps, right_assoc< S, O > > > > {};
+struct right_assoc :  pegtl::seq< S, pegtl::opt< pegtl::if_must< O, seps, right_assoc< S, O > > > > {};
 template<typename S, typename O>
-struct non_assoc : pegtl::seq<S, seps, pegtl::opt<pegtl::if_must<O, seps, S, seps>>> {};
+struct non_assoc : pegtl::seq<S, pegtl::opt<pegtl::if_must<O, seps, S>>> {};
 template< char O, char ... N >
 struct op_one : pegtl::seq< pegtl::one< O >, pegtl::at< pegtl::not_one< N ... > > > {};
 template< char O, char P, char ... N >
@@ -119,8 +118,6 @@ namespace keyword {
 
 } // namespace keyword
 
-
-
     struct name : pegtl::seq<pegtl::at<identifier_first>, pegtl::not_at<keyword::forbidden>, identifier> {};
 
     struct path_char : pegtl::sor<pegtl::identifier_other, pegtl::one<'.', '-', '+'>> {};
@@ -133,18 +130,14 @@ namespace keyword {
     struct number : pegtl::plus<pegtl::digit> {};
     struct boolean : pegtl::sor<keyword::key_true, keyword::key_false> {};
 
-    // XXX: add string_attr
     struct attr : pegtl::sor<name, string, dollarcurly_expr> {};
     struct attrpath : pegtl::list_must<attr, pegtl::one<'.'>, sep> {};
-    //struct attrpath : pegtl::sor<attrpath_> {};
-    // XXX: can be empty in original
     struct attrs : pegtl::seq<attr, pegtl::star<pegtl::plus<sep>, attr>> {};
 
 
     struct expression;
 
     struct formal : pegtl::seq<padr<name>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, expression>>> {};
-//    struct formals : pegtl::seq<pegtl::star<formal, seps, pegtl::one<','>>, pegtl::opt<seps, keyword::key_ellipsis>> {};
     struct formals_nonempty : pegtl::seq<pegtl::list<formal, padr<pegtl::one<','>>>, pegtl::opt<padr<pegtl::one<','>>, pegtl::opt<keyword::key_ellipsis>>> {};
     struct formals : pegtl::sor<keyword::key_ellipsis, formals_nonempty> {};
 
@@ -215,7 +208,7 @@ namespace keyword {
     struct expr_op : non_assoc<expr_zero, pegtl::string<'-', '>'>> {};
 
 
-    struct expr_if : pegtl::if_must<keyword::key_if, expression, seps, keyword::key_then, expression, seps, keyword::key_else, expression> {};
+    struct expr_if : pegtl::if_must<keyword::key_if, expression, keyword::key_then, expression, keyword::key_else, expression> {};
 
     struct expr_import : pegtl::if_must<keyword::key_import, expression> {};
 
