@@ -65,15 +65,14 @@ template<typename R>
 struct padr : pegtl::seq<R, seps> {};
 
 template<typename S, typename O>
-struct left_assoc : pegtl::seq<S, pegtl::star<pegtl::if_must<O, seps, S>>> {};
+struct left_assoc : pegtl::seq<S, pegtl::star<pegtl::if_must<O, S>>> {};
 template<typename S, typename O>
-struct right_assoc :  pegtl::seq< S, pegtl::opt< pegtl::if_must< O, seps, right_assoc< S, O > > > > {};
+struct right_assoc :  pegtl::seq< S, pegtl::opt< pegtl::if_must< O, right_assoc< S, O > > > > {};
 template<typename S, typename O>
-struct non_assoc : pegtl::seq<S, pegtl::opt<pegtl::if_must<O, seps, S>>> {};
+struct non_assoc : pegtl::seq<S, pegtl::opt<pegtl::if_must<O, S>>> {};
 template< char O, char ... N >
-struct op_one : pegtl::seq< pegtl::one< O >, pegtl::at< pegtl::not_one< N ... > > > {};
-template< char O, char P, char ... N >
-struct op_two : pegtl::seq< pegtl::string< O, P >, pegtl::at< pegtl::not_one< N ... > > > {};
+struct op_one : pegtl::seq< pegtl::one< O >, pegtl::if_then_else<pegtl::plus<sep>, pegtl::success, pegtl::at< pegtl::not_one< N ... > >> > {};
+
 
 namespace keyword {
     struct str_if      : pegtl::string<'i', 'f'>                          {};
@@ -130,9 +129,10 @@ namespace keyword {
     struct number : pegtl::plus<pegtl::digit> {};
     struct boolean : pegtl::sor<keyword::key_true, keyword::key_false> {};
 
-    struct attr : pegtl::sor<name, string, dollarcurly_expr> {};
-    struct attrpath : pegtl::list_must<attr, pegtl::one<'.'>, sep> {};
-    struct attrs : pegtl::seq<attr, pegtl::star<pegtl::plus<sep>, attr>> {};
+    struct attr : pegtl::sor<name> {};
+    struct attrtail : pegtl::sor<name, string, dollarcurly_expr> {};
+
+    struct attrpath : pegtl::list_must<attrtail, pegtl::one<'.'>, sep> {};
 
 
     struct expression;
@@ -150,10 +150,10 @@ namespace keyword {
     struct arguments : pegtl::plus<pegtl::sor<argument_set, argument_single>> {};
 
     struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<pad<pegtl::one<'='>>, expression>> {};
-    struct bind_inherit_from : pegtl::if_must<pegtl::one<'('>, pad<expression>, pegtl::one<')'>, pegtl::opt<pad<attrs>>> {};
-    struct bind_inherit_attr : pegtl::opt<padr<attrs>> {};
-    struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::sor<bind_inherit_from, bind_inherit_attr>> {};
-    struct binds : pegtl::list_tail<pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, pegtl::one<';'>>, seps> {};
+    struct bind_inherit_attrnames : pegtl::star<padr<attrtail>> {};
+    struct bind_inherit_from : pegtl::opt<pegtl::if_must<padr<pegtl::one<'('>>, expression, padr<pegtl::one<')'>>>> {};
+    struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::opt<bind_inherit_from>, bind_inherit_attrnames> {};
+    struct binds : pegtl::plus<pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, padr<pegtl::one<';'>>>> {};
 
     struct table_constructor : pegtl::if_must<pegtl::seq<pegtl::opt<keyword::key_rec>, padr<pegtl::one<'{'>>>, pegtl::opt<binds>, pegtl::one<'}'>> {};
 
@@ -177,35 +177,35 @@ namespace keyword {
     struct variable_tail : pegtl::seq<padr<pegtl::one<'.'>>, padr<pegtl::sor<attr, string, dollarcurly_expr>>, pegtl::opt<variable_tail_or>> {};
 
     struct expr_ten;
-    struct expr_thirteen : pegtl::seq<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr, statement_list>, pegtl::star<seps, variable_tail>> {};
+    struct expr_thirteen : pegtl::seq<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr, statement_list>, pegtl::star<variable_tail>> {};
     struct expr_twelve : pegtl::sor<boolean, number, string, uri, expr_thirteen, array_constructor, path, spath> {};
-    struct expr_ten : pegtl::seq<expr_twelve, seps, pegtl::opt<expr_ten, seps>> {};
+    struct expr_ten : pegtl::plus<padr<expr_twelve>> {};
 
-    struct expr_negate : pegtl::seq<pegtl::star<padr<op_one<'-', '>'>>>, expr_ten> {};
+    struct expr_negate : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_ten> {};
 
-    struct expr_attrtest : non_assoc<expr_negate, pegtl::one<'?'>> {};
+    struct expr_attrtest : non_assoc<expr_negate, padr<pegtl::one<'?'>>> {};
 
-    struct expr_arrayconcat : right_assoc<expr_attrtest, pegtl::two<'+'>> {};
+    struct expr_arrayconcat : right_assoc<expr_attrtest, padr<pegtl::two<'+'>>> {};
 
-    struct operators_product : pegtl::sor<pegtl::one<'*'>, op_one<'/', '/'>> {};
+    struct operators_product : pegtl::sor<padr<pegtl::one<'*'>>, op_one<'/', '/'>> {};
     struct expr_product : left_assoc<expr_arrayconcat, operators_product> {};
 
-    struct operators_sum : pegtl::sor<pegtl::one<'+'>, op_one<'-', '>'>> {};
+    struct operators_sum : pegtl::sor<padr<pegtl::one<'+'>>, op_one<'-', '>'>> {};
     struct expr_sum : left_assoc<expr_product, operators_sum> {};
 
     struct expr_not : pegtl::seq<pegtl::star<padr<pegtl::one<'!'>>>, expr_sum> {};
 
-    struct expr_setplus : right_assoc<expr_not, pegtl::two<'/'>> {};
+    struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>> {};
 
-    struct operators_ordering : pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>> {};
+    struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>>> {};
     struct expr_ordering : left_assoc<expr_setplus, operators_ordering> {};
 
-    struct operators_equality : pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>> {};
+    struct operators_equality : padr<pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>>> {};
     struct expr_equality : non_assoc<expr_ordering, operators_equality> {};
 
-    struct expr_and : left_assoc<expr_equality, pegtl::two<'&'>> {};
-    struct expr_or : left_assoc<expr_and, pegtl::two<'|'>> {};
-    struct expr_impl : non_assoc<expr_or, pegtl::string<'-', '>'>> {};
+    struct expr_and : left_assoc<expr_equality, padr<pegtl::two<'&'>>> {};
+    struct expr_or : left_assoc<expr_and, padr<pegtl::two<'|'>>> {};
+    struct expr_impl : non_assoc<expr_or, padr<pegtl::string<'-', '>'>>> {};
 
 
     struct expr_if : pegtl::if_must<keyword::key_if, expression, keyword::key_then, expression, keyword::key_else, expression> {};
