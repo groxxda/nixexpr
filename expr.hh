@@ -97,7 +97,7 @@ namespace keyword {
     struct str_any     : pegtl::sor<str_forbidden, str_or> {};
 
     template<typename Key>
-    struct key         : pegtl::seq<Key, pegtl::not_at<identifier_other>> {};
+    struct key         : pegtl::seq<Key, pegtl::if_then_else<pegtl::plus<sep>, pegtl::success, pegtl::not_at<identifier_other>>> {};
 
     struct key_if      : key<str_if>      {};
     struct key_then    : key<str_then>    {};
@@ -114,14 +114,14 @@ namespace keyword {
     struct key_false   : key<str_false>   {};
     struct key_import  : key<str_import>  {};
 
-    struct forbidden   : key<str_forbidden>{};
+    struct forbidden   : pegtl::seq<str_forbidden, pegtl::not_at<identifier_other>> {};
     struct any         : key<str_any>     {};
 
 } // namespace keyword
 
 
 
-    struct name : pegtl::seq<pegtl::not_at<keyword::forbidden>, identifier> {};
+    struct name : pegtl::seq<pegtl::at<identifier_first>, pegtl::not_at<keyword::forbidden>, identifier> {};
 
     struct path_char : pegtl::sor<pegtl::identifier_other, pegtl::one<'.', '-', '+'>> {};
     struct path : pegtl::seq<pegtl::star<path_char>, pegtl::plus<pegtl::one<'/'>, pegtl::plus<path_char>>> {};
@@ -143,9 +143,9 @@ namespace keyword {
 
     struct expression;
 
-    struct formal : pegtl::seq<name, seps, pegtl::opt<pegtl::if_must<pegtl::one<'?'>, seps, expression>>> {};
+    struct formal : pegtl::seq<padr<name>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, expression>>> {};
 //    struct formals : pegtl::seq<pegtl::star<formal, seps, pegtl::one<','>>, pegtl::opt<seps, keyword::key_ellipsis>> {};
-    struct formals_nonempty : pegtl::seq<pegtl::list<formal, pegtl::one<','>, sep>, pegtl::opt<seps, pegtl::one<','>, seps, pegtl::opt<keyword::key_ellipsis>>> {};
+    struct formals_nonempty : pegtl::seq<pegtl::list<formal, padr<pegtl::one<','>>>, pegtl::opt<padr<pegtl::one<','>>, pegtl::opt<keyword::key_ellipsis>>> {};
     struct formals : pegtl::sor<keyword::key_ellipsis, formals_nonempty> {};
 
     // TODO: merge prefix of argument_set_prebind and argument_single
@@ -157,20 +157,14 @@ namespace keyword {
     struct arguments : pegtl::plus<pegtl::sor<argument_set, argument_single>> {};
 
     struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<pad<pegtl::one<'='>>, expression>> {};
-    struct bind_inherit_from : pegtl::if_must<pegtl::seq<seps, pegtl::one<'('>>, pad<expression>, pegtl::one<')'>, pegtl::opt<pad<attrs>>> {};
-    struct bind_inherit_attr : pegtl::opt<pad<attrs>> {};
+    struct bind_inherit_from : pegtl::if_must<pegtl::one<'('>, pad<expression>, pegtl::one<')'>, pegtl::opt<pad<attrs>>> {};
+    struct bind_inherit_attr : pegtl::opt<padr<attrs>> {};
     struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::sor<bind_inherit_from, bind_inherit_attr>> {};
-    struct binds : pegtl::list<pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, pegtl::one<';'>>, seps> {};
+    struct binds : pegtl::list_tail<pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, pegtl::one<';'>>, seps> {};
 
-    struct table_field_assign : pegtl::if_must<pegtl::seq<attrpath, seps, pegtl::one<'='>>, seps, expression> {};
-    // XXX: allow specifying source object with (...)
-    struct table_field_inherit : pegtl::if_must<keyword::key_inherit, pegtl::sor<bind_inherit_from, bind_inherit_attr>> {};
-    //struct table_field_inherit : pegtl::if_must<keyword::key_inherit, seps, pegtl::list<name, seps>> {};
-    struct table_field : pegtl::sor<table_field_assign, table_field_inherit> {};
-    struct table_field_list : pegtl::plus<table_field, pad<pegtl::one<';'>>> {};
-    struct table_constructor : pegtl::if_must<pegtl::seq<padr<pegtl::opt<keyword::key_rec>>, pegtl::one<'{'>>, pegtl::pad_opt<table_field_list, sep>, pegtl::one<'}'>> {};
+    struct table_constructor : pegtl::if_must<pegtl::seq<pegtl::opt<keyword::key_rec>, padr<pegtl::one<'{'>>>, pegtl::opt<binds>, pegtl::one<'}'>> {};
 
-    struct array_field_list : pegtl::list<expression, seps> {};
+    struct array_field_list : pegtl::plus<expression> {};
     struct array_constructor : pegtl::if_must<pegtl::one<'['>, pegtl::pad_opt<array_field_list, sep>, pegtl::one<']'>> {};
 
     struct dollarcurly_expr : pegtl::if_must<pegtl::string<'$', '{'>, pad<expression>, pegtl::one<'}'>> {};
@@ -179,10 +173,10 @@ namespace keyword {
     //struct function_call_head : pegtl::sor<name, bracket_expr> {};
     //struct function_call : pegtl::seq<function_call_head, pegtl::plus<pegtl::until<pegtl::seq<seps, function_call_tail>, seps, variable_tail>>> {};
 
-    struct assert : pegtl::if_must<keyword::key_assert, sep, expression, pad<pegtl::one<';'>>> {};
-    struct with : pegtl::if_must<keyword::key_with, pad<expression>, padr<pegtl::one<';'>>> {};
-    struct let : pegtl::if_must<keyword::key_let, pad<pegtl::opt<binds>>, padr<keyword::key_in>> {};
-    struct statement : pegtl::if_must<pegtl::sor<assert, with, let, arguments>, seps, expression> {};
+    struct assert : pegtl::if_must<keyword::key_assert, expression, padr<pegtl::one<';'>>> {};
+    struct with : pegtl::if_must<keyword::key_with, expression, padr<pegtl::one<';'>>> {};
+    struct let : pegtl::if_must<keyword::key_let, pegtl::opt<binds>, keyword::key_in> {};
+    struct statement : pegtl::if_must<pegtl::sor<assert, with, let, arguments>, expression> {};
     struct statement_list;
 
 
@@ -196,7 +190,7 @@ namespace keyword {
 
     struct expr_thirteen;
 
-    struct variable_tail_or : pegtl::if_must<padr<keyword::key_or>, expression> {};
+    struct variable_tail_or : pegtl::if_must<keyword::key_or, expression> {};
     struct variable_tail : pegtl::seq<padr<pegtl::one<'.'>>, padr<pegtl::sor<attr, string, dollarcurly_expr>>, pegtl::opt<variable_tail_or>> {};
 
     //struct unary_operators : pegtl::sor<op_one<'-', '>'>, op_one<'!', '='>> {};
@@ -235,11 +229,9 @@ namespace keyword {
     struct expr_op : non_assoc<expr_zero, pegtl::string<'-', '>'>> {};
 
 
-    // XXX: if[]!=[]then[]else[] should be valid....
-    struct if_separator : pegtl::sor<pegtl::at<pegtl::one<'{', '(', '[', '"'>>, pegtl::plus<sep>> {};
-    struct expr_if : pegtl::if_must<keyword::key_if, if_separator, expression, seps, keyword::key_then, if_separator, expression, seps, keyword::key_else, if_separator, expression> {};
+    struct expr_if : pegtl::if_must<keyword::key_if, expression, seps, keyword::key_then, expression, seps, keyword::key_else, expression> {};
 
-    struct expr_import : pegtl::if_must<padr<keyword::key_import>, expression> {};
+    struct expr_import : pegtl::if_must<keyword::key_import, expression> {};
 
     struct expression : pegtl::sor<statement_list, expr_op> {};
 
