@@ -144,13 +144,12 @@ namespace keyword {
     struct formals_nonempty : pegtl::seq<pegtl::list<formal, padr<pegtl::one<','>>>, pegtl::opt<padr<pegtl::one<','>>, pegtl::opt<keyword::key_ellipsis>>> {};
     struct formals : pegtl::sor<keyword::key_ellipsis, formals_nonempty> {};
 
-    // TODO: merge prefix of argument_set_prebind and argument_single
-    struct argument_single : pegtl::seq<padr<name>, pegtl::one<':'>, padr<pegtl::sor<sep, pegtl::at<pegtl::one<'[', '(', '{','!'>>>>> {};
+    struct argument_single : pegtl::seq<pegtl::one<':'>, padr<pegtl::sor<sep, pegtl::at<pegtl::one<'[', '(', '{','!'>>>>> {};
     struct argument_formals : pegtl::seq<pegtl::one<'{'>, pegtl::pad_opt<formals, sep>, pegtl::one<'}'>> {};
-    struct argument_set_prebind : pegtl::seq<padr<name>, pegtl::if_must<padr<pegtl::one<'@'>>, padr<argument_formals>>> {};
-    struct argument_set_postbind : pegtl::seq<padr<argument_formals>, pegtl::opt<padr<pegtl::one<'@'>>, padr<name>>> {};
-    struct argument_set : pegtl::seq<pegtl::sor<argument_set_prebind, argument_set_postbind>, padr<pegtl::one<':'>>> {};
-    struct arguments : pegtl::plus<pegtl::sor<argument_set, argument_single>> {};
+    struct argument_set_prebind : pegtl::seq<pegtl::if_must<padr<pegtl::one<'@'>>, padr<argument_formals>>, padr<pegtl::one<':'>>> {};
+    struct argument_set_postbind : pegtl::seq<padr<argument_formals>, pegtl::opt<padr<pegtl::one<'@'>>, padr<name>>, padr<pegtl::one<':'>>> {};
+    struct argument_prebind : pegtl::seq<padr<name>, pegtl::sor<argument_set_prebind, argument_single>> {};
+    struct arguments : pegtl::plus<pegtl::sor<argument_set_postbind, argument_prebind>> {};
 
     struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<padr<pegtl::one<'='>>, expression>> {};
     struct bind_inherit_attrnames : pegtl::star<attrtail> {};
