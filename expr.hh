@@ -174,9 +174,8 @@ namespace keyword {
     struct expr_select : pegtl::seq<padr<pegtl::sor<bracket_expr, dollarcurly_expr, table_constructor, attr>>, pegtl::star<variable_tail>> {};
     struct expr_simple : padr<pegtl::sor<boolean, number, string, path, uri, array_constructor, spath>> {};
     struct expr_applying_tail : pegtl::sor<expr_simple, expr_select> {};
-    template<typename S>
-    struct expr_applying : pegtl::seq<S, pegtl::star<pegtl::not_at<pegtl::one<';', ','>>, expr_applying_tail>> {};
-    struct expr_apply : pegtl::if_then_else<expr_simple, pegtl::success, expr_applying<expr_select>> {};
+    struct expr_applying : pegtl::seq<expr_select, pegtl::star<pegtl::not_at<pegtl::one<';', ','>>, expr_applying_tail>> {};
+    struct expr_apply : pegtl::if_then_else<expr_simple, pegtl::success, expr_applying> {};
 
 
     struct expr_negate : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply> {};
