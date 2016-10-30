@@ -220,12 +220,14 @@ namespace keyword {
     template<> struct expr_setplus<table_constructor> : right_assoc<expr_apply<table_constructor>, padr<pegtl::two<'/'>>> {};
 
     struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>>> {};
-    struct expr_ordering : left_assoc<expr_setplus<void>, operators_ordering, expr_sum<number>> {};
+    template<typename CTX>
+    struct expr_ordering : left_assoc<expr_setplus<CTX>, operators_ordering, expr_sum<number>> {};
+    //template<> struct expr_ordering<number> : left_assoc<expr_sum<number>, operators_ordering> {};
 
     struct operators_equality : padr<pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>>> {};
 // todo: we cannot do anything here, right?
     template<typename CTX>
-    struct expr_equality : non_assoc<expr_ordering, operators_equality> {};
+    struct expr_equality : non_assoc<expr_ordering<CTX>, operators_equality> {};
 
     template<typename CTX>
     struct expr_and : left_assoc<expr_equality<CTX>, padr<pegtl::two<'&'>>, expr_equality<boolean>> {};
@@ -233,8 +235,10 @@ namespace keyword {
     template<typename CTX>
     struct expr_or : left_assoc<expr_and<CTX>, padr<pegtl::two<'|'>>, expr_and<boolean>> {};
 
-    template<typename CTX>
-    struct expr_impl : non_assoc<expr_or<CTX>, padr<pegtl::string<'-', '>'>>, expr_or<boolean>> {};
+    template<typename CTX> struct expr_impl;
+    template<> struct expr_impl<void> : non_assoc<expr_or<void>, padr<pegtl::string<'-', '>'>>, expr_or<boolean>> {};
+    template<> struct expr_impl<boolean> : non_assoc<expr_or<boolean>, padr<pegtl::string<'-', '>'>>, expr_or<boolean>> {};
+
 
     template<typename CTX>
     struct expr_if : pegtl::if_must<keyword::key_if, expression<boolean>, keyword::key_then, expression<CTX>, keyword::key_else, expression<CTX>> {};
