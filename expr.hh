@@ -64,12 +64,12 @@ struct pad : pegtl::pad<R, sep> {};
 template<typename R>
 struct padr : pegtl::seq<R, seps> {};
 
-template<typename S, typename O>
-struct left_assoc : pegtl::seq<S, pegtl::star<pegtl::if_must<O, S>>> {};
-template<typename S, typename O>
-struct right_assoc :  pegtl::seq< S, pegtl::opt< pegtl::if_must< O, right_assoc< S, O > > > > {};
-template<typename S, typename O>
-struct non_assoc : pegtl::seq<S, pegtl::opt<pegtl::if_must<O, S>>> {};
+template<typename S, typename O, typename P = S>
+struct left_assoc : pegtl::seq<S, pegtl::star<pegtl::if_must<O, P>>> {};
+template<typename S, typename O, typename P = S>
+struct right_assoc :  pegtl::seq< S, pegtl::opt< pegtl::if_must< O, right_assoc< P, O > > > > {};
+template<typename S, typename O, typename P = S>
+struct non_assoc : pegtl::seq<S, pegtl::opt<pegtl::if_must<O, P>>> {};
 template< char O, char ... N >
 struct op_one : pegtl::seq< pegtl::one< O >, pegtl::if_then_else<pegtl::plus<sep>, pegtl::success, pegtl::at< pegtl::not_one< N ... > >> > {};
 
@@ -135,10 +135,11 @@ namespace keyword {
 
     struct attrpath : pegtl::list_must<attrtail, padr<pegtl::one<'.'>>> {};
 
+    template<typename CTX = void>
     struct expression;
 
     // TODO: optimize with until<>
-    struct formal : pegtl::seq<padr<name>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, expression>>> {};
+    struct formal : pegtl::seq<padr<name>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, expression<>>>> {};
     struct formals_nonempty : pegtl::seq<pegtl::list<formal, padr<pegtl::one<','>>>, pegtl::opt<padr<pegtl::one<','>>, pegtl::opt<keyword::key_ellipsis>>> {};
     struct formals : pegtl::opt<pegtl::sor<keyword::key_ellipsis, formals_nonempty>> {};
 
@@ -149,9 +150,9 @@ namespace keyword {
     struct argument_prebind : pegtl::seq<padr<name>, pegtl::sor<argument_set_prebind, argument_single>> {};
     struct arguments : pegtl::plus<pegtl::sor<argument_set_postbind, argument_prebind>> {};
 
-    struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<padr<pegtl::one<'='>>, expression>> {};
+    struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<padr<pegtl::one<'='>>, expression<>>> {};
     struct bind_inherit_attrnames : pegtl::star<attrtail> {};
-    struct bind_inherit_from : pegtl::opt<pegtl::if_must<padr<pegtl::one<'('>>, expression, padr<pegtl::one<')'>>>> {};
+    struct bind_inherit_from : pegtl::opt<pegtl::if_must<padr<pegtl::one<'('>>, expression<>, padr<pegtl::one<')'>>>> {};
     struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::opt<bind_inherit_from>, bind_inherit_attrnames> {};
     struct binds : pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, padr<pegtl::one<';'>>> {};
 
@@ -160,8 +161,8 @@ namespace keyword {
     struct expr_applying_tail;
     struct array_constructor : pegtl::if_must<padr<pegtl::one<'['>>, pegtl::until<pegtl::one<']'>, expr_applying_tail>> {};
 
-    struct dollarcurly_expr : pegtl::if_must<padr<pegtl::string<'$', '{'>>, expression, pegtl::one<'}'>> {};
-    struct bracket_expr : pegtl::if_must<padr<pegtl::one<'('>>, expression, pegtl::one<')'>> {};
+    struct dollarcurly_expr : pegtl::if_must<padr<pegtl::string<'$', '{'>>, expression<>, pegtl::one<'}'>> {};
+    struct bracket_expr : pegtl::if_must<padr<pegtl::one<'('>>, expression<>, pegtl::one<')'>> {};
 
 
 
@@ -173,53 +174,70 @@ namespace keyword {
     struct expr_simple : pegtl::sor<boolean, number, string, path, uri, array_constructor, spath> {};
     struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select> {};
     struct expr_applying : pegtl::seq<expr_select, pegtl::star<pegtl::not_at<pegtl::one<';', ','>>, expr_applying_tail>> {};
-    template<typename T = expr_simple>
-    struct expr_apply : pegtl::if_then_else<padr<T>, pegtl::success, expr_applying> {};
+    template<typename T = void>
+    struct expr_apply : pegtl::if_then_else<padr<expr_simple>, pegtl::success, expr_applying> {};
 
+    template<typename CTX = void>
+    struct expr_negate : pegtl::if_must_else<pegtl::plus<op_one<'-', '>'>>, expr_apply<number>, expr_apply<>> {};
+    template<> struct expr_negate<number> : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply<number>> {};
 
-    struct expr_negate : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply<>> {};
+    template<typename CTX = void>
+    struct expr_attrtest : pegtl::seq<expr_negate<>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, attrpath>>> {};
+    template<> struct expr_attrtest<boolean> : pegtl::if_must_else<padr<boolean>, pegtl::success, pegtl::seq<expr_apply<table_constructor>, pegtl::opt<padr<pegtl::one<'?'>>, attrpath>>> {};
 
-    struct expr_attrtest : pegtl::seq<expr_negate, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, attrpath>>> {};
-
-    struct expr_arrayconcat : right_assoc<expr_attrtest, padr<pegtl::two<'+'>>> {};
+    struct expr_arrayconcat : right_assoc<expr_attrtest<>, padr<pegtl::two<'+'>>, expr_apply<array_constructor>> {};
 
     struct operators_product : pegtl::sor<padr<pegtl::one<'*'>>, op_one<'/', '/'>> {};
-    struct expr_product : left_assoc<expr_arrayconcat, operators_product> {};
+    template<typename CTX = void>
+    struct expr_product : left_assoc<expr_arrayconcat, operators_product, expr_negate<number>> {};
+    template<> struct expr_product<number> : left_assoc<expr_negate<number>, operators_product> {};
 
     struct operators_sum : pegtl::sor<padr<pegtl::one<'+'>>, op_one<'-', '>'>> {};
-    struct expr_sum : left_assoc<expr_product, operators_sum> {};
+//todo: string concat makes life hard here
+    template<typename CTX = void>
+    struct expr_sum : left_assoc<expr_product<CTX>, operators_sum, expr_product<CTX>> {};
 
-    struct expr_not : pegtl::seq<pegtl::star<padr<pegtl::one<'!'>>>, expr_sum> {};
+// todo: || boolean, remove fallthrough from attrtest?
+    struct expr_not : pegtl::if_then_else<pegtl::plus<padr<pegtl::one<'!'>>>, expr_attrtest<boolean>, expr_sum<>> {};
 
-    struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>> {};
+    struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>, expr_apply<table_constructor>> {};
 
     struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>>> {};
-    struct expr_ordering : left_assoc<expr_setplus, operators_ordering> {};
+    struct expr_ordering : left_assoc<expr_setplus, operators_ordering, expr_sum<number>> {};
 
     struct operators_equality : padr<pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>>> {};
+// todo: we cannot do anything here, right?
+    template<typename CTX = void>
     struct expr_equality : non_assoc<expr_ordering, operators_equality> {};
 
-    struct expr_and : left_assoc<expr_equality, padr<pegtl::two<'&'>>> {};
-    struct expr_or : left_assoc<expr_and, padr<pegtl::two<'|'>>> {};
-    struct expr_impl : non_assoc<expr_or, padr<pegtl::string<'-', '>'>>> {};
+    template<typename CTX = void>
+    struct expr_and : left_assoc<expr_equality<CTX>, padr<pegtl::two<'&'>>, expr_equality<boolean>> {};
 
+    template<typename CTX = void>
+    struct expr_or : left_assoc<expr_and<CTX>, padr<pegtl::two<'|'>>, expr_and<boolean>> {};
 
-    struct expr_if : pegtl::if_must<keyword::key_if, expression, keyword::key_then, expression, keyword::key_else, expression> {};
+    template<typename CTX = void>
+    struct expr_impl : non_assoc<expr_or<CTX>, padr<pegtl::string<'-', '>'>>, expr_or<boolean>> {};
+
+    template<typename CTX = void>
+    struct expr_if : pegtl::if_must<keyword::key_if, expression<boolean>, keyword::key_then, expression<CTX>, keyword::key_else, expression<CTX>> {};
 
     // TODO: allow importing uri
     //struct expr_import : pegtl::if_must<keyword::key_import, padr<pegtl::sor<path, spath, string, name, expr_select>>, pegtl::opt<expr_applying<expr_applying_tail>>> {};
 
 
-    struct assert : pegtl::if_must<keyword::key_assert, expression, padr<pegtl::one<';'>>> {};
-    struct with : pegtl::if_must<keyword::key_with, expression, padr<pegtl::one<';'>>> {};
+    struct assert : pegtl::if_must<keyword::key_assert, expression<boolean>, padr<pegtl::one<';'>>> {};
+// todo: restrict context?
+    struct with : pegtl::if_must<keyword::key_with, expression<>, padr<pegtl::one<';'>>> {};
     struct let : pegtl::if_must<keyword::key_let, pegtl::until<keyword::key_in, binds>> {};
-    struct statement : pegtl::if_must<pegtl::sor<assert, with, let, arguments>, expression> {};
-    struct statement_list : pegtl::sor<statement, /*expr_import,*/ expr_if> {};
-
-    struct expression : pegtl::sor<statement_list, expr_impl> {};
 
 
-    struct grammar : pegtl::must<seps, expression, pegtl::eof> {};
+    template<> struct expression<void> : pegtl::seq<pegtl::star<pegtl::sor<assert, with, let, arguments>>, /*expr_import,*/ pegtl::sor<expr_if<void>, expr_impl<void>>> {};
+    template<> struct expression<boolean> : pegtl::seq<pegtl::star<pegtl::sor<assert, with, let, arguments>>, /*expr_import,*/ pegtl::sor<expr_if<boolean>, expr_impl<boolean>>> {};
+
+
+
+    struct grammar : pegtl::must<seps, expression<>, pegtl::eof> {};
 
 
 } // namespace parser
