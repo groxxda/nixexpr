@@ -184,12 +184,12 @@ namespace keyword {
     template<typename CTX = void>
     struct expr_apply : pegtl::if_then_else<padr<expr_simple>, pegtl::success, expr_applying<CTX>> {};
 
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_negate : pegtl::if_must_else<pegtl::plus<op_one<'-', '>'>>, expr_apply<number>, expr_apply<>> {};
     template<> struct expr_negate<number> : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply<number>> {};
 
-    template<typename CTX = void>
-    struct expr_attrtest : pegtl::seq<expr_negate<>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, attrpath>>> {};
+    template<typename CTX>
+    struct expr_attrtest : pegtl::seq<expr_negate<CTX>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, attrpath>>> {};
  //todo: we lose typesafety here
     template<> struct expr_attrtest<boolean> : pegtl::if_must_else<padr<boolean>, pegtl::success,
                                                 pegtl::if_must_else<padr<table_constructor>, pegtl::seq<padr<pegtl::one<'?'>>, attrpath>,
@@ -197,47 +197,46 @@ namespace keyword {
                                                 >
                                                > {};
 
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_arrayconcat : right_assoc<expr_attrtest<CTX>, padr<pegtl::two<'+'>>, expr_apply<array_constructor>> {};
     template<> struct expr_arrayconcat<array_constructor> : right_assoc<expr_apply<array_constructor>, padr<pegtl::two<'+'>>> {};
 
     struct operators_product : pegtl::sor<padr<pegtl::one<'*'>>, op_one<'/', '/'>> {};
-    template<typename CTX = void>
-    struct expr_product : left_assoc<expr_arrayconcat<>, operators_product, expr_negate<number>> {};
+    template<typename CTX>
+    struct expr_product : left_assoc<expr_arrayconcat<CTX>, operators_product, expr_negate<number>> {};
     template<> struct expr_product<number> : left_assoc<expr_negate<number>, operators_product> {};
 
     struct operators_sum_plus : padr<pegtl::one<'+'>> {};
     struct operators_sum : pegtl::sor<operators_sum_plus, op_one<'-', '>'>> {};
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_sum : left_assoc<expr_product<CTX>, operators_sum, expr_product<CTX>> {};
     template<> struct expr_sum<string> : left_assoc<expr_apply<string>, operators_sum_plus, expr_apply<string>> {};
 
 
-// todo: || boolean, remove fallthrough from attrtest?
-    struct expr_not : pegtl::if_then_else<pegtl::plus<padr<pegtl::one<'!'>>>, expr_attrtest<boolean>, expr_sum<>> {};
+    struct expr_not : pegtl::if_then_else<pegtl::plus<padr<pegtl::one<'!'>>>, expr_attrtest<boolean>, expr_sum<void>> {};
 
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>, expr_apply<table_constructor>> {};
     template<> struct expr_setplus<table_constructor> : right_assoc<expr_apply<table_constructor>, padr<pegtl::two<'/'>>> {};
 
     struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>>> {};
-    struct expr_ordering : left_assoc<expr_setplus<>, operators_ordering, expr_sum<number>> {};
+    struct expr_ordering : left_assoc<expr_setplus<void>, operators_ordering, expr_sum<number>> {};
 
     struct operators_equality : padr<pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>>> {};
 // todo: we cannot do anything here, right?
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_equality : non_assoc<expr_ordering, operators_equality> {};
 
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_and : left_assoc<expr_equality<CTX>, padr<pegtl::two<'&'>>, expr_equality<boolean>> {};
 
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_or : left_assoc<expr_and<CTX>, padr<pegtl::two<'|'>>, expr_and<boolean>> {};
 
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_impl : non_assoc<expr_or<CTX>, padr<pegtl::string<'-', '>'>>, expr_or<boolean>> {};
 
-    template<typename CTX = void>
+    template<typename CTX>
     struct expr_if : pegtl::if_must<keyword::key_if, expression<boolean>, keyword::key_then, expression<CTX>, keyword::key_else, expression<CTX>> {};
 
     // TODO: allow importing uri
