@@ -1,6 +1,6 @@
 // Copyright (c) 2014-2016 Dr. Colin Hirsch and Daniel Frey
 // Please see LICENSE for license or visit https://github.com/ColinH/PEGTL/
-
+#define NDEBUG
 #include <string>
 #include <iostream>
 

@@ -38,6 +38,59 @@ namespace ast {
         unsigned long long data;
     };
 
+    struct string : public base {
+        explicit string(std::string in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << data; }
+        std::string data;
+    };
+
+    struct boolean : public base {
+        explicit boolean(bool in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << data; }
+        bool data;
+    };
+
+    struct not_ : public base {
+        explicit not_(std::shared_ptr<base> in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << "!(" << data << ")"; }
+        std::shared_ptr<base> data;
+    };
+
+    struct negate : public base {
+        explicit negate(std::shared_ptr<base> in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << "(-" << data << ")"; }
+        std::shared_ptr<base> data;
+    };
+
+    struct inverse : public base {
+        explicit inverse(std::shared_ptr<base> in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << "(1/" << data << ")"; }
+        std::shared_ptr<base> data;
+    };
+
+    struct sum : public base {
+        explicit sum() : base() {};
+        virtual void stream(std::ostream& o) const override {
+            o << "(";
+            auto iter = data.cbegin();
+            o << *iter;
+            while (++iter != data.cend()) o << "+" << *iter;
+            o << ")";
+        }
+        std::vector<std::shared_ptr<base>> data;
+    };
+
+    struct product : public base {
+        explicit product() : base() {};
+        virtual void stream(std::ostream& o) const override {
+            o << "(";
+            auto iter = data.cbegin();
+            o << *iter;
+            while (++iter != data.cend()) o << "*" << *iter;
+            o << ")";
+        }
+        std::vector<std::shared_ptr<base>> data;
+    };
 
 } // namespace ast
 
@@ -50,6 +103,53 @@ namespace state {
         base(const base&) = delete;
         void operator=(const base&) = delete;
         std::shared_ptr<ast::base> result;
+        std::shared_ptr<ast::base> value;
+    };
+
+    struct sum : base {
+        std::shared_ptr<ast::sum> sum = std::make_shared<ast::sum>();
+        bool next_neg = false;
+        void push_back() {
+            assert(this->value);
+            if (next_neg) {
+                auto is_negated = std::dynamic_pointer_cast<ast::negate>(value);
+                if (is_negated)
+                    value = std::move(is_negated->data);
+                else
+                    value = std::make_shared<ast::negate>(std::move(value));
+                next_neg = false;
+            }
+            sum->data.push_back(std::move(value));
+            value.reset();
+        }
+        void success(base& in_result) {
+            sum->data.insert(sum->data.begin(), in_result.value);
+            assert(!this->value);
+            in_result.value = sum;
+        }
+    };
+
+    struct product : base {
+        std::shared_ptr<ast::product> product = std::make_shared<ast::product>();
+        bool next_inverse = false;
+        void push_back() {
+            assert(this->value);
+            if (next_inverse) {
+//                auto is_inverse = std::dynamic_pointer_cast<ast::inverse>(value);
+//                if (is_inverse)
+//                    value = std::move(is_inverse->data);
+//                else
+                    value = std::make_shared<ast::inverse>(std::move(value));
+                next_inverse = false;
+            }
+            product->data.push_back(std::move(value));
+            value.reset();
+        }
+        void success(base& in_result) {
+            product->data.insert(product->data.begin(), in_result.value);
+            assert(!this->value);
+            in_result.value = product;
+        }
     };
 } // namespace state
 
@@ -63,15 +163,14 @@ struct comment : pegtl::sor<line_comment, long_comment> {};
 
 struct string;
 
-template<typename CTX = void>
 struct dollarcurly_expr;
 
 struct short_string_escaped : pegtl::seq<pegtl::one<'\\'>, pegtl::one<'"', '$', '\\'>> {};
-struct short_string_content : pegtl::star<pegtl::sor<short_string_escaped, dollarcurly_expr<string>, pegtl::not_one<'"'>>> {};
+struct short_string_content : pegtl::star<pegtl::sor<short_string_escaped, dollarcurly_expr, pegtl::not_one<'"'>>> {};
 struct short_string : pegtl::if_must<pegtl::one<'"'>, short_string_content, pegtl::one<'"'>> {};
 // XXX: add prefix stripping
 struct long_string_escaped : pegtl::seq<pegtl::two<'\''>, pegtl::sor<pegtl::one<'\''>, pegtl::one<'$'>, pegtl::seq<pegtl::one<'\\'>, pegtl::one<'n', 'r', 't'>>>> {};
-struct long_string_content : pegtl::star<pegtl::sor<long_string_escaped, dollarcurly_expr<string>, pegtl::seq<pegtl::not_at<pegtl::two<'\''>>, pegtl::any>>> {};
+struct long_string_content : pegtl::star<pegtl::sor<long_string_escaped, dollarcurly_expr, pegtl::seq<pegtl::not_at<pegtl::two<'\''>>, pegtl::any>>> {};
 struct long_string : pegtl::if_must<pegtl::two<'\''>, long_string_content, pegtl::two<'\''>> {};
 struct string : pegtl::sor<short_string, long_string> {};
 
@@ -91,7 +190,8 @@ template<typename S, typename O, typename P = S>
 struct non_assoc : pegtl::seq<S, pegtl::opt<pegtl::if_must<O, P>>> {};
 template< char O, char ... N >
 struct op_one : pegtl::seq< pegtl::one< O >, pegtl::if_then_else<pegtl::plus<sep>, pegtl::success, pegtl::at< pegtl::not_one< N ... > >> > {};
-
+template<char O, char P, char... N>
+struct op_two : pegtl::seq<padr<pegtl::one<O>>, pegtl::one<P>, pegtl::if_then_else<pegtl::plus<sep>, pegtl::success, pegtl::at<pegtl::not_one<N...>>>> {};
 
 namespace keyword {
     struct str_if      : pegtl::string<'i', 'f'>                          {};
@@ -150,7 +250,7 @@ namespace keyword {
     struct boolean : pegtl::sor<keyword::key_true, keyword::key_false> {};
 
     struct attr : pegtl::sor<name> {};
-    struct attrtail : padr<pegtl::sor<name, string, dollarcurly_expr<string>>> {};
+    struct attrtail : padr<pegtl::sor<name, string, dollarcurly_expr>> {};
 
     struct attrpath : pegtl::list_must<attrtail, padr<pegtl::one<'.'>>> {};
 
@@ -180,56 +280,62 @@ namespace keyword {
     struct expr_applying_tail;
     struct array_constructor : pegtl::if_must<padr<pegtl::one<'['>>, pegtl::until<pegtl::one<']'>, expr_applying_tail>> {};
 
-    template<typename CTX>
-    struct dollarcurly_expr : pegtl::if_must<padr<pegtl::string<'$', '{'>>, expression<CTX>, pegtl::one<'}'>> {};
-    template<typename CTX>
-    struct bracket_expr : pegtl::if_must<padr<pegtl::one<'('>>, expression<CTX>, pegtl::one<')'>> {};
+    struct dollarcurly_expr : pegtl::if_must<padr<pegtl::string<'$', '{'>>, expression<string>, pegtl::one<'}'>> {};
+    struct bracket_expr : pegtl::if_must<padr<pegtl::one<'('>>, expression<>, pegtl::one<')'>> {};
 
 
 
 
     struct variable_tail_or : pegtl::if_must<keyword::key_or, expr_applying_tail> {};
-    struct variable_tail : pegtl::seq<padr<pegtl::one<'.'>>, padr<pegtl::sor<attr, string, dollarcurly_expr<string>>>, pegtl::opt<variable_tail_or>> {};
+    struct variable_tail : pegtl::seq<pegtl::one<'.'>, seps, pegtl::sor<attr, string, dollarcurly_expr>, seps, pegtl::opt<variable_tail_or>> {};
 
     template<typename CTX = void>
-    struct expr_select : pegtl::seq<padr<pegtl::sor<bracket_expr<CTX>, dollarcurly_expr<CTX>, table_constructor, attr>>, pegtl::star<variable_tail>> {};
-    struct expr_simple : pegtl::sor<boolean, number, string, array_constructor, spath, path, uri> {};
+    struct expr_select : pegtl::seq<pegtl::sor<table_constructor, bracket_expr, attr>, seps, pegtl::star<variable_tail>> {};
+    struct expr_simple : pegtl::sor<boolean, number, string, array_constructor, dollarcurly_expr, spath, path, uri> {};
     struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select<>> {};
     template<typename CTX = void>
     struct expr_applying : pegtl::seq<expr_select<CTX>, pegtl::star<pegtl::not_at<pegtl::one<';', ','>>, expr_applying_tail>> {};
     template<typename CTX = void>
     struct expr_apply : pegtl::if_then_else<padr<expr_simple>, pegtl::success, expr_applying<CTX>> {};
 
+    struct operator_negate_double : op_two<'-', '-', '>'> {};
+    struct operator_negate : op_one<'-', '>'> {};
+    struct expr_negate_val : expr_apply<number> {};
     template<typename CTX>
-    struct expr_negate : pegtl::if_must_else<pegtl::plus<op_one<'-', '>'>>, expr_apply<number>, expr_apply<>> {};
-    template<> struct expr_negate<number> : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply<number>> {};
+    struct expr_negate : pegtl::seq<pegtl::star<operator_negate_double>, pegtl::if_must_else<operator_negate, expr_negate_val, expr_apply<>>> {};
+    //template<> struct expr_negate<number> : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply<number>> {};
+
+    struct expr_attrtest : pegtl::seq<expr_negate<void>, pegtl::opt<pegtl::if_must<pegtl::one<'?'>, seps, attrpath>>> {};
+
 
     template<typename CTX>
-    struct expr_attrtest : pegtl::seq<expr_negate<CTX>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, attrpath>>> {};
- //todo: we lose typesafety here
-    template<> struct expr_attrtest<boolean> : pegtl::if_must_else<padr<boolean>, pegtl::success,
-                                                pegtl::if_must_else<padr<table_constructor>, pegtl::seq<padr<pegtl::one<'?'>>, attrpath>,
-                                                  pegtl::seq<expr_applying<>, pegtl::opt<padr<pegtl::one<'?'>>, attrpath>>
-                                                >
-                                               > {};
-
-    template<typename CTX>
-    struct expr_arrayconcat : right_assoc<expr_attrtest<CTX>, padr<pegtl::two<'+'>>, expr_apply<array_constructor>> {};
+    struct expr_arrayconcat : right_assoc<expr_attrtest, padr<pegtl::two<'+'>>, expr_apply<array_constructor>> {};
     template<> struct expr_arrayconcat<array_constructor> : right_assoc<expr_apply<array_constructor>, padr<pegtl::two<'+'>>> {};
 
-    struct operators_product : pegtl::sor<padr<pegtl::one<'*'>>, op_one<'/', '/'>> {};
+    struct operators_product_mul : padr<pegtl::one<'*'>> {};
+    struct operators_product_div : op_one<'/', '/'> {};
+    struct operators_product : pegtl::sor<operators_product_mul, operators_product_div> {};
+    struct expr_product_val : expr_negate<number>{};
+    struct expr_product_apply : pegtl::plus<pegtl::if_must<operators_product, expr_product_val>> {};
     template<typename CTX>
-    struct expr_product : left_assoc<expr_arrayconcat<CTX>, operators_product, expr_negate<number>> {};
-    template<> struct expr_product<number> : left_assoc<expr_negate<number>, operators_product> {};
+    struct expr_product : pegtl::seq<expr_arrayconcat<CTX>, pegtl::opt<expr_product_apply>> {};
+    //template<> struct expr_product<number> : left_assoc<expr_negate<number>, operators_product> {};
 
     struct operators_sum_plus : padr<pegtl::one<'+'>> {};
-    struct operators_sum : pegtl::sor<operators_sum_plus, op_one<'-', '>'>> {};
+    struct operators_sum_minus : op_one<'-', '>'> {};
+    struct operators_sum : pegtl::sor<operators_sum_plus, operators_sum_minus> {};
     template<typename CTX>
-    struct expr_sum : left_assoc<expr_product<CTX>, operators_sum, expr_product<CTX>> {};
-    template<> struct expr_sum<string> : left_assoc<expr_apply<string>, operators_sum_plus, expr_apply<string>> {};
+    struct expr_sum_val : expr_product<CTX> {};
+    template<typename CTX>
+    struct expr_sum_apply : pegtl::plus<pegtl::if_must<operators_sum, expr_sum_val<CTX>>> {};
+    template<typename CTX>
+    struct expr_sum : pegtl::seq<expr_product<CTX>, pegtl::opt<expr_sum_apply<CTX>>> {};
+    //template<> struct expr_sum<string> : left_assoc<expr_apply<string>, operators_sum_plus, expr_apply<string>> {};
 
-
-    struct expr_not : pegtl::if_then_else<pegtl::plus<padr<pegtl::one<'!'>>>, expr_attrtest<boolean>, expr_sum<void>> {};
+    struct operator_not : padr<pegtl::one<'!'>> {};
+    struct operator_not_double : pegtl::rep<2, operator_not> {};
+    struct expr_not_val : expr_attrtest {};
+    struct expr_not : pegtl::seq<pegtl::star<operator_not_double>, pegtl::if_then_else<operator_not, expr_not_val, expr_sum<void>>> {};
 
     template<typename CTX>
     struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>, expr_apply<table_constructor>> {};
@@ -274,9 +380,6 @@ namespace keyword {
     template<> struct expression<void> : pegtl::seq<statement_list, pegtl::sor<expr_if<void>, expr_impl<void>>> {};
     template<> struct expression<boolean> : pegtl::seq<statement_list, pegtl::sor<expr_if<boolean>, expr_impl<boolean>>> {};
     template<> struct expression<string> : pegtl::seq<statement_list, pegtl::sor<expr_if<string>, expr_sum<string>>> {};
-    template<> struct expression<number> : pegtl::seq<statement_list, pegtl::sor<expr_if<number>, expr_sum<number>>> {};
-    template<> struct expression<table_constructor> : pegtl::seq<statement_list, pegtl::sor<expr_if<table_constructor>, expr_setplus<table_constructor>>> {};
-    template<> struct expression<array_constructor> : pegtl::seq<statement_list, pegtl::sor<expr_if<array_constructor>, expr_arrayconcat<array_constructor>>> {};
 
 
     struct grammar : pegtl::must<seps, expression<>, pegtl::eof> {};
@@ -284,15 +387,24 @@ namespace keyword {
     struct control {
         template<typename Rule>
         struct normal : pegtl::normal<Rule> {};
-    //    template<typename Rule>
-    //    struct tracer : normal<Rule> {};
     };
-    //template<> struct control::tracer<grammar> : pegtl::tracer<grammar> {};
-    //template<typename x> struct control::tracer<expression<x>> : pegtl::tracer<expression<x>> {};
-    //template<> struct control::tracer<short_string_content> : pegtl::normal<short_string_content> {};
+
+
+
+    //template<> struct control::normal<grammar> : pegtl::tracer<grammar> {};
+    //template<> struct control::normal<grammar> : pegtl::tracer<grammar> {};
+    //template<> struct control::normal<grammar> : pegtl::tracer<grammar> {};
+
+    template<typename x> struct control::normal<expr_sum_apply<x>> : pegtl::change_state<expr_sum_apply<x>, state::sum, pegtl::normal> { };
+    template<> struct control::normal<expr_product_apply> : pegtl::change_state<expr_product_apply, state::product, pegtl::normal> { };
+    //template<typename x> struct control::normal<expression<x>> : pegtl::tracer<expression<x>> {};
+//    template<typename x> struct control::normal<expr_negate<x>> : pegtl::tracer<expr_negate<x>> {};
+
+    //template<typename x> struct control::normal<expr_apply<x>> : pegtl::tracer<expr_apply<x>> {};
+    //template<> struct control::normal<short_string_content> : pegtl::normal<short_string_content> {};
 
     template<typename Rule>
-    struct value_errors : pegtl::normal<Rule> {
+    struct errors : pegtl::normal<Rule> {
         static const std::string error_message;
         template<typename Input, typename... States>
         static void raise(const Input& in, States&& ...) {
@@ -300,15 +412,157 @@ namespace keyword {
         }
     };
 
-    template<typename Rule> struct value_action : pegtl::nothing<Rule> {};
-    template<> struct value_action<number> {
+
+    template<typename Rule>
+    struct action : pegtl::nothing<Rule> {};
+
+    template<> struct action<number> {
         template<typename Input>
-        static void apply(const Input& in, state::base& result) {
-            result.result = std::make_shared<ast::number>(std::stoll(in.string()));
+        static void apply(const Input& in, state::base& state) {
+            assert(!state.value);
+            state.value = std::make_shared<ast::number>(std::stoll(in.string()));
         }
     };
 
-    template<> struct control::normal<number> : pegtl::change_action<number, value_action, value_errors> {};
+    template<> struct action<keyword::key_true> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {
+            assert(!state.value);
+            state.value = std::make_shared<ast::boolean>(true);
+        }
+    };
+
+    template<> struct action<keyword::key_false> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {
+            assert(!state.value);
+            state.value = std::make_shared<ast::boolean>(false);
+        }
+    };
+
+    template<> struct action<expr_not_val> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {
+            assert(state.value);
+            auto is_boolean = std::dynamic_pointer_cast<ast::boolean>(state.value);
+            if (is_boolean)
+                is_boolean->data = !is_boolean->data;
+            else
+                state.value = std::make_shared<ast::not_>(std::move(state.value));
+        }
+    };
+
+    template<> struct action<expr_negate_val> {
+      template<typename Input>
+        static void apply(const Input& in, state::base& state) {
+            assert(state.value);
+            state.value = std::make_shared<ast::negate>(std::move(state.value));
+        }
+    };
+
+    template<> struct action<operators_sum_minus> {
+        template<typename Input>
+        static void apply(const Input& in, state::sum& state) {
+            state.next_neg = true;
+        }
+    };
+
+    template<typename x> struct action<expr_sum_val<x>> {
+        template<typename Input>
+        static void apply(const Input& in, state::sum& state) {
+            state.push_back();
+        }
+    };
+
+    template<> struct action<operators_product_div> {
+        template<typename Input>
+        static void apply(const Input& in, state::product& state) {
+            state.next_inverse = true;
+        }
+    };
+
+    template<> struct action<expr_product_val> {
+        template<typename Input>
+        static void apply(const Input& in, state::product& state) {
+            state.push_back();
+        }
+    };
+
+    template<typename x> struct action<expression<x>> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {
+            assert(state.value);
+            assert(!state.result);
+            state.result = std::move(state.value);
+        }
+    };
+
+
+
+//    template<> const std::string errors<expr_negate<number>>::error_message = "incomplete negate expression, expected number";
+//    template<> const std::string errors<expr_sum<number>>::error_message = "incomplete sum expression, expected number";
+//
+//
+//    template<typename Rule> struct value_action : pegtl::nothing<Rule> {};
+//
+//    /*template<> struct value_action<string> {
+//        template<typename Input>
+//        static void apply(const Input& in, state::base& result) {
+//            result.result = std::make_shared<ast::string>(in.string());
+//        }
+//    };*/
+//
+
+//
+//    template<typename Rule> struct negate_action : pegtl::nothing<Rule> {};
+//    template<> struct negate_action<operator_negate> {
+//        template<typename Input>
+//        static void apply(const Input& in, state::negate& result) {
+//            result.negated = !result.negated;
+//        }
+//    };
+//
+//    template<typename Rule> struct sum_action : pegtl::nothing<Rule> {};
+//    template<> struct sum_action<operators_sum_plus> {
+//        template<typename Input>
+//        static void apply(const Input& in, state::sum& result) {
+//            result.push_back();
+//        }
+//    };
+//    template<> struct sum_action<operators_sum_minus> {
+//        template<typename Input>
+//        static void apply(const Input& in, state::sum& result) {
+//            result.push_back();
+//        }
+//    };
+
+    //template<typename Rule> struct value_action : pegtl::nothing<Rule> {};
+
+
+    /*template<> struct not_action<operator_not> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& result) {
+    //apply not if e is (bool, not)
+            result.result = std::make_shared<ast::not_>(result.result);
+        }
+    };*/
+
+
+//    template<typename x> struct control::normal<expr_negate<x>> : pegtl::change_state_and_action<expr_negate<x>, state::negate, negate_action, errors> {};
+//
+//    template<typename x> struct control::normal<expr_sum<x>> : pegtl::change_state_and_action<expr_sum<x>, state::sum, sum_action, errors> {};
+//
+//    //template<typename x> struct control::normal<expr_apply<x>> : pegtl::change_state<expr_apply<x>, pegtl::nothing, pegtl::normal> {};
+//
+//    template<> struct control::normal<number> : pegtl::change_action<number, value_action, errors> {};
+
+
+    //template<> struct control::normal<number> : pegtl::change_action<number, value_action, value_errors> {};
+    //template<> struct control::normal<boolean> : pegtl::change_action<boolean, value_action, value_errors> {};
+//    template<> struct control::normal<short_string_content> : pegtl::change_action<short_string_content, value_action, value_errors> {};
+    //template<> struct control::normal<operator_not> : pegtl::change_action<operator_not, value_action, value_errors> {};
+
+    //template<> struct control::normal<grammar> : pegtl::change_action<grammar, value_action, grammar_errors> {};
 
 
 

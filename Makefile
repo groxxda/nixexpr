@@ -1,4 +1,4 @@
-CXXFLAGS =	-O2 -g -Wall -fmessage-length=0 -std=gnu++11 $(INCLUDES)
+CXXFLAGS =	-O2 -g -Wall -fmessage-length=0 -std=c++1z $(INCLUDES) -ftemplate-depth=821 #-ftemplate-backtrace-limit=0
 CXX = clang++
 
 OBJS = main.o
