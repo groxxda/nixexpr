@@ -17,7 +17,8 @@ template <typename Str, typename... Args>
 bool parse(Str&& str, Args&&... args) {
     try {
 //        nix::parser::state::base result;
-        auto res = pegtl::parse_string<grammar, nix::parser::action/*nix::parser::grammar_action*//*pegtl::nothing*/, /*pegtl::normal*/nix::parser::control::normal>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
+        //auto res = pegtl::parse_string<grammar, nix::parser::action/*nix::parser::grammar_action*//*pegtl::nothing*/, /*pegtl::normal*/nix::parser::control::normal>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
+        auto res = pegtl::parse_string<grammar, pegtl::nothing, /*pegtl::normal*/nix::parser::control::normal>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
 //        std::cout << "result: " << result.result << std::endl;
         return res;
     } catch (pegtl::parse_error& e) {
@@ -31,7 +32,7 @@ bool parse(Str&& str, Args&&... args) {
 }
 
 template<typename R>
-R compare(nix::parser::state::base& state) {
+R compare(nix::parser::state::expression& state) {
     std::stringstream s;
     s << state.result;
     R r;
@@ -40,14 +41,14 @@ R compare(nix::parser::state::base& state) {
 }
 
 template<>
-std::string compare(nix::parser::state::base& state) {
+std::string compare(nix::parser::state::expression& state) {
     std::stringstream s;
     s << state.result;
     return s.str();
 }
 
 template<typename R, typename A>
-R compare_downcast(nix::parser::state::base& state) {
+R compare_downcast(nix::parser::state::expression& state) {
     auto downcast = std::dynamic_pointer_cast<A>(state.result);
     if (!downcast) {
         auto val = state.result;
@@ -66,9 +67,9 @@ R compare_downcast(nix::parser::state::base& state) {
     return downcast->data;
 }
 
-template<> int compare(nix::parser::state::base& state) { return compare_downcast<int, nix::ast::number>(state); }
+template<> int compare(nix::parser::state::expression& state) { return compare_downcast<int, nix::ast::number>(state); }
 
-template<> bool compare(nix::parser::state::base& state) { return compare_downcast<bool, nix::ast::boolean>(state); }
+template<> bool compare(nix::parser::state::expression& state) { return compare_downcast<bool, nix::ast::boolean>(state); }
 
 #if 0
 TEST_CASE("grammar analysis") {
@@ -78,7 +79,7 @@ TEST_CASE("grammar analysis") {
 #endif
 
 TEST_CASE("comments") {
-    nix::parser::state::base result;
+    nix::parser::state::expression result;
     SECTION("single line comment") {
         REQUIRE(parse("1# single line string", result));
         REQUIRE(compare<int>(result) == 1);
@@ -94,7 +95,7 @@ TEST_CASE("comments") {
 }
 
 TEST_CASE("boolean expression") {
-    nix::parser::state::base result;
+    nix::parser::state::expression result;
     SECTION("true") {
         REQUIRE(parse("true", result));
         REQUIRE(compare<bool>(result) == true);
@@ -120,9 +121,11 @@ TEST_CASE("boolean expression") {
 
 template<typename S, typename R>
 void check(S&& str, R& expect) {
-    nix::parser::state::base result;
-    REQUIRE(parse(str, result));
-    REQUIRE(compare<R>(result) == expect);
+    SECTION(str) {
+        nix::parser::state::expression result;
+        REQUIRE(parse(str, result));
+        REQUIRE(compare<R>(result) == expect);
+    }
 }
 
 template<typename S>
@@ -143,6 +146,7 @@ TEST_CASE("strings") {
     check("''longstring with ''' escape''"s);
 }
 
+
 /*
 TEST_CASE("bla") {
     nix::parser::state::base result;
@@ -157,7 +161,7 @@ TEST_CASE("bla") {
 
 
 TEST_CASE("number") {
-    nix::parser::state::base result;
+    nix::parser::state::expression result;
     SECTION("1337") {
         REQUIRE(parse("1337", result));
         REQUIRE(compare<long long>(result) == 1337);
@@ -173,7 +177,7 @@ TEST_CASE("number") {
 }
 
 TEST_CASE("arithmetic sum") {
-    nix::parser::state::base result;
+    nix::parser::state::expression result;
     SECTION("-23 + 42") {
         REQUIRE(parse("-23 + 42", result));
         REQUIRE(compare<std::string>(result) == "((-23)+42)");
@@ -197,7 +201,7 @@ TEST_CASE("arithmetic sum") {
 }
 
 TEST_CASE("arithmetic product") {
-    nix::parser::state::base result;
+    nix::parser::state::expression result;
     SECTION("23 * 42") {
         REQUIRE(parse("23 * 42", result));
         REQUIRE(compare<std::string>(result) == "(23*42)");
@@ -225,7 +229,7 @@ TEST_CASE("arithmetic product") {
 }
 
 TEST_CASE("arithmetic mixed") {
-    nix::parser::state::base result;
+    nix::parser::state::expression result;
     SECTION("1 * 2 + 1") {
         REQUIRE(parse("1 * 2 + 1", result));
         REQUIRE(compare<std::string>(result) == "((1*2)+1)");
@@ -236,16 +240,24 @@ TEST_CASE("arithmetic mixed") {
     }
 }
 
-//
-//TEST_CASE("table") {
-//    CHECK(parse("{ }"));
-//    CHECK(parse("{ } // {}"));
-//    CHECK(parse("{ a = 1; }"));
-//    CHECK(parse("{ a = 1; b = \"c\"; }"));
-//    CHECK(parse("{ a = 1; b = \"c\"; c = foobar; }"));
-//    CHECK(parse("{ inherit a; }"));
-//    CHECK(parse("{ inherit a b; }"));
-//}
+
+TEST_CASE("table") {
+    check("{ }"s);
+    check("rec { }"s);
+    check("{ a = 1; }"s);
+    check("rec { a = 1; }"s);
+    check("{ a = 1; b = \"c\"; }"s);
+    check("{ a = 1; b = \"c\"; c = foobar; }"s);
+    check("{ inherit a; }"s);
+    check("{ inherit a b; }"s);
+    check("{ inherit (a) b; }"s);
+    check("{ inherit (a) b c; }"s);
+}
+
+TEST_CASE("table merge") {
+    //check("{ } // {}"s);
+}
+
 //
 //TEST_CASE("array") {
 //    CHECK(parse("[]"));

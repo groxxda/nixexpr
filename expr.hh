@@ -44,6 +44,12 @@ namespace ast {
         std::string data;
     };
 
+    struct name : public base {
+        explicit name(std::string in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << data; }
+        std::string data;
+    };
+
     struct boolean : public base {
         explicit boolean(bool in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << data; }
@@ -92,6 +98,19 @@ namespace ast {
         std::vector<std::shared_ptr<base>> data;
     };
 
+    struct table : public base {
+        explicit table(bool recursive) : base(), recursive(recursive) {};
+        virtual void stream(std::ostream& o) const override {
+            if (recursive) o << "rec ";
+            o << "{ ";
+            for (auto iter = data.cbegin(); iter != data.cend(); ++iter)
+                o << iter->first << " = " << iter->second << "; ";
+            o << "}";
+        }
+        bool recursive;
+        std::map<std::shared_ptr<base>, std::shared_ptr<base>> data;
+    };
+
 } // namespace ast
 
 
@@ -106,16 +125,25 @@ namespace state {
         std::shared_ptr<ast::base> value;
     };
 
-    struct sum : base {
+    struct expression : base {
+        void success(base& in_result) {
+            assert(!in_result.value);
+            assert(result);
+            assert(!value);
+            in_result.value = std::move(result);
+        }
+    };
+
+    struct sum : expression {
         std::shared_ptr<ast::sum> sum = std::make_shared<ast::sum>();
         bool next_neg = false;
         void push_back() {
-            assert(this->value);
+            assert(value);
             if (next_neg) {
-                auto is_negated = std::dynamic_pointer_cast<ast::negate>(value);
-                if (is_negated)
-                    value = std::move(is_negated->data);
-                else
+//                auto is_negated = std::dynamic_pointer_cast<ast::negate>(value);
+//                if (is_negated)
+//                    value = std::move(is_negated->data);
+//                else
                     value = std::make_shared<ast::negate>(std::move(value));
                 next_neg = false;
             }
@@ -123,17 +151,18 @@ namespace state {
             value.reset();
         }
         void success(base& in_result) {
-            sum->data.insert(sum->data.begin(), in_result.value);
+            assert(in_result.value);
+            sum->data.insert(sum->data.begin(), std::move(in_result.value));
             assert(!this->value);
             in_result.value = sum;
         }
     };
 
-    struct product : base {
+    struct product : expression {
         std::shared_ptr<ast::product> product = std::make_shared<ast::product>();
         bool next_inverse = false;
         void push_back() {
-            assert(this->value);
+            assert(value);
             if (next_inverse) {
 //                auto is_inverse = std::dynamic_pointer_cast<ast::inverse>(value);
 //                if (is_inverse)
@@ -146,9 +175,24 @@ namespace state {
             value.reset();
         }
         void success(base& in_result) {
-            product->data.insert(product->data.begin(), in_result.value);
+            assert(in_result.value);
+            product->data.insert(product->data.begin(), std::move(in_result.value));
             assert(!this->value);
             in_result.value = product;
+        }
+    };
+
+    struct table : expression {
+        std::map<std::shared_ptr<ast::base>, std::shared_ptr<ast::base>> data;
+
+        void success(base& in_result) {
+            assert(in_result.value);
+            auto is_table = std::dynamic_pointer_cast<ast::table>(in_result.value);
+            assert(is_table);
+            is_table->data = std::move(data);
+std::cout << "table::success" << std::endl;
+            assert(!this->value);
+
         }
     };
 } // namespace state
@@ -269,13 +313,18 @@ namespace keyword {
     struct argument_prebind : pegtl::seq<padr<name>, pegtl::sor<argument_set_prebind, argument_single>> {};
     struct arguments : pegtl::plus<pegtl::sor<argument_set_postbind, argument_prebind>> {};
 
+    struct bind_eq_attrpath : attrpath {};
     struct bind_eq : pegtl::seq<attrpath, pegtl::if_must<padr<pegtl::one<'='>>, expression<>>> {};
     struct bind_inherit_attrnames : pegtl::star<attrtail> {};
     struct bind_inherit_from : pegtl::opt<pegtl::if_must<padr<pegtl::one<'('>>, expression<>, padr<pegtl::one<')'>>>> {};
     struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::opt<bind_inherit_from>, bind_inherit_attrnames> {};
     struct binds : pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, padr<pegtl::one<';'>>> {};
 
-    struct table_constructor : pegtl::if_must<pegtl::seq<pegtl::opt<keyword::key_rec>, padr<pegtl::one<'{'>>>, pegtl::until<pegtl::one<'}'>, binds>> {};
+    struct table_begin_recursive : pegtl::seq<keyword::key_rec, padr<pegtl::one<'{'>>> {};
+    struct table_begin_nonrecursive : padr<pegtl::one<'{'>> {};
+    struct table_begin : pegtl::sor<table_begin_recursive, table_begin_nonrecursive> {};
+    struct table_end : pegtl::one<'}'> {};
+    struct table : pegtl::if_must<table_begin, pegtl::until<table_end, binds>> {};
 
     struct expr_applying_tail;
     struct array_constructor : pegtl::if_must<padr<pegtl::one<'['>>, pegtl::until<pegtl::one<']'>, expr_applying_tail>> {};
@@ -290,7 +339,7 @@ namespace keyword {
     struct variable_tail : pegtl::seq<pegtl::one<'.'>, seps, pegtl::sor<attr, string, dollarcurly_expr>, seps, pegtl::opt<variable_tail_or>> {};
 
     template<typename CTX = void>
-    struct expr_select : pegtl::seq<pegtl::sor<table_constructor, bracket_expr, attr>, seps, pegtl::star<variable_tail>> {};
+    struct expr_select : pegtl::seq<pegtl::sor<table, bracket_expr, attr>, seps, pegtl::star<variable_tail>> {};
     struct expr_simple : pegtl::sor<boolean, number, string, array_constructor, dollarcurly_expr, spath, path, uri> {};
     struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select<>> {};
     template<typename CTX = void>
@@ -338,8 +387,8 @@ namespace keyword {
     struct expr_not : pegtl::seq<pegtl::star<operator_not_double>, pegtl::if_then_else<operator_not, expr_not_val, expr_sum<void>>> {};
 
     template<typename CTX>
-    struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>, expr_apply<table_constructor>> {};
-    template<> struct expr_setplus<table_constructor> : right_assoc<expr_apply<table_constructor>, padr<pegtl::two<'/'>>> {};
+    struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>, expr_apply<table>> {};
+    template<> struct expr_setplus<table> : right_assoc<expr_apply<table>, padr<pegtl::two<'/'>>> {};
 
     struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>>> {};
     template<typename CTX>
@@ -389,14 +438,46 @@ namespace keyword {
         struct normal : pegtl::normal<Rule> {};
     };
 
+    namespace actions {
+        template<typename Rule>
+        struct table : pegtl::nothing<Rule> {};
 
+
+
+        template<> struct table<bind_eq_attrpath> {
+            template<typename Input> static void apply(const Input& in, state::table& state) {
+                std::cout << "bind_eq_attrpath::apply" << std::endl;
+            }
+        };
+
+        template<> struct table<bind_eq> {
+            template<typename Input> static void apply(const Input& in, state::table& state) {
+                std::cout << "bind_eq::apply" << std::endl;
+            }
+        };
+
+        template<> struct table<bind_inherit> {
+            template<typename Input> static void apply(const Input& in, state::table& state) {
+                std::cout << "bind_inherit::apply" << std::endl;
+            }
+        };
+    } // namespace actions
 
     //template<> struct control::normal<grammar> : pegtl::tracer<grammar> {};
     //template<> struct control::normal<grammar> : pegtl::tracer<grammar> {};
     //template<> struct control::normal<grammar> : pegtl::tracer<grammar> {};
 
-    template<typename x> struct control::normal<expr_sum_apply<x>> : pegtl::change_state<expr_sum_apply<x>, state::sum, pegtl::normal> { };
-    template<> struct control::normal<expr_product_apply> : pegtl::change_state<expr_product_apply, state::product, pegtl::normal> { };
+
+
+    template<typename Rule>
+    struct action : pegtl::nothing<Rule> {};
+
+
+    template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::expression, action, pegtl::normal> {};
+    template<typename x> struct control::normal<expr_sum_apply<x>> : pegtl::change_state<expr_sum_apply<x>, state::sum, pegtl::normal> {};
+    template<> struct control::normal<expr_product_apply> : pegtl::change_state<expr_product_apply, state::product, pegtl::normal> {};
+    template<> struct control::normal<binds> : pegtl::change_state_and_action<binds, state::table, actions::table, pegtl::normal> {};
+    template<> struct control::normal<name> : pegtl::tracer<name> {};
     //template<typename x> struct control::normal<expression<x>> : pegtl::tracer<expression<x>> {};
 //    template<typename x> struct control::normal<expr_negate<x>> : pegtl::tracer<expr_negate<x>> {};
 
@@ -412,13 +493,9 @@ namespace keyword {
         }
     };
 
-
-    template<typename Rule>
-    struct action : pegtl::nothing<Rule> {};
-
     template<> struct action<number> {
         template<typename Input>
-        static void apply(const Input& in, state::base& state) {
+        static void apply(const Input& in, state::expression& state) {
             assert(!state.value);
             state.value = std::make_shared<ast::number>(std::stoll(in.string()));
         }
@@ -497,9 +574,36 @@ namespace keyword {
         }
     };
 
+    template<> struct action<table_begin_recursive> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {                std::cout << "table_begin_recursive::apply" << std::endl;
+
+            assert(!state.value);
+            state.value = std::make_shared<ast::table>(true);
+        }
+    };
+
+    template<> struct action<keyword::key_let> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {                std::cout << "key_let::apply" << std::endl;
+
+            assert(!state.value);
+            state.value = std::make_shared<ast::table>(true);
+        }
+    };
+
+    template<> struct action<table_begin_nonrecursive> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {                std::cout << "table_begin_nonrecursive::apply" << std::endl;
+
+            assert(!state.value);
+            state.value = std::make_shared<ast::table>(false);
+        }
+    };
+
     template<typename x> struct action<expression<x>> {
         template<typename Input>
-        static void apply(const Input& in, state::base& state) {
+        static void apply(const Input& in, state::expression& state) {
             assert(state.value);
             assert(!state.result);
             state.result = std::move(state.value);
