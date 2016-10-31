@@ -32,10 +32,26 @@ namespace ast {
         return b ? (o << *b) : (o << "NULL");
     }
 
+    struct number : public base {
+        explicit number(const long long in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << data; }
+        unsigned long long data;
+    };
+
 
 } // namespace ast
 
+
 namespace parser {
+
+namespace state {
+    struct base {
+        base() = default;
+        base(const base&) = delete;
+        void operator=(const base&) = delete;
+        std::shared_ptr<ast::base> result;
+    };
+} // namespace state
 
 struct identifier_first : pegtl::identifier_first {};
 struct identifier_other : pegtl::sor<pegtl::identifier_other, pegtl::one<'\'', '-'>> {};
@@ -258,12 +274,42 @@ namespace keyword {
     template<> struct expression<void> : pegtl::seq<statement_list, pegtl::sor<expr_if<void>, expr_impl<void>>> {};
     template<> struct expression<boolean> : pegtl::seq<statement_list, pegtl::sor<expr_if<boolean>, expr_impl<boolean>>> {};
     template<> struct expression<string> : pegtl::seq<statement_list, pegtl::sor<expr_if<string>, expr_sum<string>>> {};
-    template<> struct expression<number> : pegtl::seq<statement_list, pegtl::sor<expr_if<number>, expr_impl<void>>> {};
+    template<> struct expression<number> : pegtl::seq<statement_list, pegtl::sor<expr_if<number>, expr_sum<number>>> {};
     template<> struct expression<table_constructor> : pegtl::seq<statement_list, pegtl::sor<expr_if<table_constructor>, expr_setplus<table_constructor>>> {};
     template<> struct expression<array_constructor> : pegtl::seq<statement_list, pegtl::sor<expr_if<array_constructor>, expr_arrayconcat<array_constructor>>> {};
 
 
     struct grammar : pegtl::must<seps, expression<>, pegtl::eof> {};
+
+    struct control {
+        template<typename Rule>
+        struct normal : pegtl::normal<Rule> {};
+    //    template<typename Rule>
+    //    struct tracer : normal<Rule> {};
+    };
+    //template<> struct control::tracer<grammar> : pegtl::tracer<grammar> {};
+    //template<typename x> struct control::tracer<expression<x>> : pegtl::tracer<expression<x>> {};
+    //template<> struct control::tracer<short_string_content> : pegtl::normal<short_string_content> {};
+
+    template<typename Rule>
+    struct value_errors : pegtl::normal<Rule> {
+        static const std::string error_message;
+        template<typename Input, typename... States>
+        static void raise(const Input& in, States&& ...) {
+            throw pegtl::parse_error(error_message, in);
+        }
+    };
+
+    template<typename Rule> struct value_action : pegtl::nothing<Rule> {};
+    template<> struct value_action<number> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& result) {
+            result.result = std::make_shared<ast::number>(std::stoll(in.string()));
+        }
+    };
+
+    template<> struct control::normal<number> : pegtl::change_action<number, value_action, value_errors> {};
+
 
 
 } // namespace parser

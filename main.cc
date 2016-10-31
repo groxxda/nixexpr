@@ -12,10 +12,13 @@ int main( int argc, char ** argv )
     assert(ok);
 
     for (int i = 1; i < argc; i++) {
+        nix::parser::state::base result;
         if (getenv("DEBUG"))
-            ok = 0; //pegtl::parse_file<nix::parser::grammar, pegtl::nothing, pegtl::tracer>(argv[i]);
+            ok = 0;
+            //ok = pegtl::parse_file<nix::parser::grammar, pegtl::nothing, nix::parser::control::tracer>(argv[i]);
         else
-            ok = pegtl::parse_file<nix::parser::grammar, pegtl::nothing, pegtl::normal>(argv[i]);
+            //ok = 0;
+            ok = pegtl::parse_file<nix::parser::grammar, pegtl::nothing, nix::parser::control::normal>(argv[i], result);
         assert(ok);
         std::cout << "parsed :" << argv[i] << std::endl;
     }
