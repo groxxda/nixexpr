@@ -424,6 +424,15 @@ namespace keyword {
         }
     };
 
+    template<> struct action<string> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {
+            assert(!state.value);
+            //xxx: can we move here?
+            state.value = std::make_shared<ast::string>(in.string());
+        }
+    };
+
     template<> struct action<keyword::key_true> {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {

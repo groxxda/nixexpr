@@ -11,6 +11,7 @@
 #include "expr.hh"
 
 using namespace nix::parser;
+using namespace std::literals;
 
 template <typename Str, typename... Args>
 bool parse(Str&& str, Args&&... args) {
@@ -117,6 +118,31 @@ TEST_CASE("boolean expression") {
     //CHECK(parse("!(\"a\")"));
 }
 
+template<typename S, typename R>
+void check(S&& str, R& expect) {
+    nix::parser::state::base result;
+    REQUIRE(parse(str, result));
+    REQUIRE(compare<R>(result) == expect);
+}
+
+template<typename S>
+void check(S&& str) {
+    check<>(str, str);
+}
+
+TEST_CASE("strings") {
+    check("\"\""s);
+    check("\"shortstring\""s);
+    check("\"shortstring with \\\" escape\""s);
+//    check("\"shortstring with dollarcurly ${true}\""s);
+//    check("\"shortstring with dollarcurlys ${true}${true}\""s);
+//    check("\"shortstring with dollarcurly ${\"with inner string\"}\""s);
+//    check("\"shortstring with nested dollarcurly ${\"[outer,${\"<inner>\"}]\"}\""s);
+    check("''''"s);
+    check("''longstring''"s);
+    check("''longstring with ''' escape''"s);
+}
+
 /*
 TEST_CASE("bla") {
     nix::parser::state::base result;
@@ -126,18 +152,7 @@ TEST_CASE("bla") {
     }
 }*/
 
-//TEST_CASE("strings") {
-//    CHECK(parse("\"\""));
-//    CHECK(parse("\"shortstring\""));
-//    CHECK(parse("\"shortstring with \\\" escape\""));
-//    CHECK(parse("\"shortstring with dollarcurly ${true}\""));
-//    CHECK(parse("\"shortstring with dollarcurlys ${true}${true}\""));
-//    CHECK(parse("\"shortstring with dollarcurly ${\"with inner string\"}\""));
-//    CHECK(parse("\"shortstring with nested dollarcurly ${\"[outer,${\"<inner>\"}]\"}\""));
-//    CHECK(parse("''''"));
-//    CHECK(parse("''longstring''"));
-//    CHECK(parse("''longstring with ''' escape''"));
-//}
+
 
 
 
