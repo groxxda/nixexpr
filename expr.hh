@@ -18,7 +18,7 @@ namespace nix {
 namespace ast {
     struct base {
         virtual void stream(std::ostream&) const = 0;
-        virtual bool operator==(const base* o) const { return o->operator==(*this); }
+        virtual bool operator==(const base* o) const { return o && o->operator==(*this); }
         virtual bool operator==(const base& o) const { throw "dont know how to compare base types.."; }
     protected:
         explicit base() {}
@@ -74,7 +74,10 @@ namespace ast {
 
     struct negate : public base {
         explicit negate(std::shared_ptr<base> in_data) : base(), data(in_data) {};
+        template<typename BASE>
+        explicit negate(BASE&& in_data) : base(), data(std::make_shared<BASE>(std::forward<BASE>(in_data))) {}
         virtual void stream(std::ostream& o) const override { o << "(-" << data << ")"; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const negate*>(o); return cast && data == cast->data; }
         std::shared_ptr<base> data;
     };
 
@@ -141,17 +144,19 @@ namespace ast {
         std::vector<std::shared_ptr<ast::base>> data;
     };
 
-    struct statement : virtual public base {
-        explicit statement() = default;
-    };
+    struct statement : virtual public base { };
 
     struct let : public binds, public statement {
         explicit let() : binds(true) {}
-        virtual void stream(std::ostream& o) const override {
-            o << "let ";
-            binds::stream(o);
-            o << "in ";
-        }
+        virtual void stream(std::ostream& o) const override { o << "let "; binds::stream(o); o << "in "; }
+    };
+
+    struct function : public statement {
+        explicit function() : base() {}
+        virtual void stream(std::ostream& o) const override { o << argument << ": " << data; }
+        virtual bool operator==(const base* o) { auto cast = dynamic_cast<const function*>(o); return cast && data == cast->data; }
+        std::shared_ptr<ast::name> argument;
+        std::shared_ptr<ast::base> data;
     };
 
     struct expression : public base {

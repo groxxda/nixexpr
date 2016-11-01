@@ -143,6 +143,7 @@ TEST_CASE("bla") {
 TEST_CASE("number") {
     check("1337", 1337);
     check("-1337"s, "(-1337)"s);
+    CHECK_AST("-1337", negate(number(1337)));
     check("--1337", 1337);
 }
 
