@@ -147,7 +147,7 @@ namespace state {
         }
     };
 
-    struct sum : expression {
+    struct sum : base {
         std::shared_ptr<ast::sum> sum = std::make_shared<ast::sum>();
         bool next_neg = false;
         void push_back() {
@@ -163,7 +163,7 @@ namespace state {
             sum->data.push_back(std::move(value));
             value.reset();
         }
-        void success(expression& in_result) {
+        void success(base& in_result) {
             assert(in_result.value);
             sum->data.insert(sum->data.begin(), std::move(in_result.value));
             assert(!this->value);
@@ -171,7 +171,7 @@ namespace state {
         }
     };
 
-    struct product : expression {
+    struct product : base {
         std::shared_ptr<ast::product> product = std::make_shared<ast::product>();
         bool next_inverse = false;
         void push_back() {
@@ -187,7 +187,7 @@ namespace state {
             product->data.push_back(std::move(value));
             value.reset();
         }
-        void success(expression& in_result) {
+        void success(base& in_result) {
             assert(in_result.value);
             assert(!value);
             product->data.insert(product->data.begin(), std::move(in_result.value));
