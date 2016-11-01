@@ -549,10 +549,7 @@ namespace keyword {
         template<typename Rule>
         struct sum : action<Rule> {};
 
-        template<> struct sum<expr_negate_val> : action<expr_negate_val> {
-//XXX this is here for the product<> fallthrough. change action for product and this can be removed.
-            using action<expr_negate_val>::apply;
-
+        template<> struct sum<expr_negate_val> {
             template<typename Input>
             static void apply(const Input& in, state::sum& state) {
                 assert(state.value);
@@ -573,6 +570,24 @@ namespace keyword {
                 state.push_back();
             }
         };
+
+
+        template<typename Rule>
+        struct product : action<Rule> {};
+
+        template<> struct product<operators_product_div> {
+            template<typename Input>
+            static void apply(const Input& in, state::product& state) {
+                state.next_inverse = true;
+            }
+        };
+
+        template<> struct product<expr_product_val> {
+            template<typename Input>
+            static void apply(const Input& in, state::product& state) {
+                state.push_back();
+            }
+        };
     } // namespace actions
 
     //template<> struct control::normal<grammar> : pegtl::tracer<grammar> {};
@@ -583,7 +598,7 @@ namespace keyword {
 
     template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::expression, action, pegtl::tracer> {};
     template<typename x> struct control::normal<expr_sum_apply<x>> : pegtl::change_state_and_action<expr_sum_apply<x>, state::sum, actions::sum, pegtl::normal> {};
-    template<> struct control::normal<expr_product_apply> : pegtl::change_state<expr_product_apply, state::product, pegtl::normal> {};
+    template<> struct control::normal<expr_product_apply> : pegtl::change_state_and_action<expr_product_apply, state::product, actions::product, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::table, actions::table, pegtl::normal> {};
     //template<> struct control::normal<name> : pegtl::tracer<name> {};
     //template<typename x> struct control::normal<expression<x>> : pegtl::tracer<expression<x>> {};
@@ -655,20 +670,6 @@ namespace keyword {
                 is_boolean->data = !is_boolean->data;
             else
                 state.value = std::make_shared<ast::not_>(std::move(state.value));
-        }
-    };
-
-    template<> struct action<operators_product_div> {
-        template<typename Input>
-        static void apply(const Input& in, state::product& state) {
-            state.next_inverse = true;
-        }
-    };
-
-    template<> struct action<expr_product_val> {
-        template<typename Input>
-        static void apply(const Input& in, state::product& state) {
-            state.push_back();
         }
     };
 
