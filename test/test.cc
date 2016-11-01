@@ -93,19 +93,9 @@ TEST_CASE("grammar analysis") {
 #endif
 
 TEST_CASE("comments") {
-    nix::parser::state::expression result;
-    SECTION("single line comment") {
-        REQUIRE(parse("1# single line comment", result));
-        REQUIRE(compare<int>(result) == 1);
-    }
-    SECTION("multi line comment") {
-        REQUIRE(parse("4/* multi \n line \n comment */", result));
-        REQUIRE(compare<int>(result) == 4);
-    }
-    SECTION("multi line comment") {
-        REQUIRE(parse("/* multi \n line \n comment */16", result));
-        REQUIRE(compare<int>(result) == 16);
-    }
+    check("1#single line comment", 1);
+    check("4/* multi \n line \n comment */", 4);
+    check("/* multi \n line \n comment */16", 16);
 }
 
 TEST_CASE("boolean expression") {
