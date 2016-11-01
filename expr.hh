@@ -18,6 +18,8 @@ namespace nix {
 namespace ast {
     struct base {
         virtual void stream(std::ostream&) const = 0;
+        virtual bool operator==(const base* o) const { return o->operator==(*this); }
+        virtual bool operator==(const base& o) const { throw "dont know how to compare base types.."; }
     protected:
         explicit base() {}
         ~base() {}
@@ -32,15 +34,21 @@ namespace ast {
         return b ? (o << *b) : (o << "NULL");
     }
 
+    inline bool operator==(const std::shared_ptr<base>& a, const std::shared_ptr<base>& b) {
+        return a->operator==(b.get());
+    }
+
     struct number : public base {
         explicit number(const long long in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << data; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const number*>(o); return cast && data == cast->data; }
         unsigned long long data;
     };
 
     struct string : public base {
         explicit string(std::string in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << "\"" << data << "\""; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const string*>(o); return cast && data == cast->data; }
         std::string data;
     };
 
@@ -52,7 +60,9 @@ namespace ast {
 
     struct boolean : public base {
         explicit boolean(bool in_data) : base(), data(in_data) {};
-        virtual void stream(std::ostream& o) const override { o << data; }
+        virtual void stream(std::ostream& o) const override { o << std::boolalpha << data; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const boolean*>(o); return cast && data == cast->data; }
+        operator bool() { return data; }
         bool data;
     };
 
@@ -76,6 +86,8 @@ namespace ast {
 
     struct sum : public base {
         explicit sum() : base() {};
+        template<typename... A>
+        explicit sum(A... a) : base(), data{std::make_shared<number>(a)...} {};
         virtual void stream(std::ostream& o) const override {
             o << "(";
             auto iter = data.cbegin();
@@ -83,6 +95,7 @@ namespace ast {
             while (++iter != data.cend()) o << "+" << *iter;
             o << ")";
         }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const sum*>(o); return cast && data == cast->data; }
         std::vector<std::shared_ptr<base>> data;
     };
 
@@ -98,17 +111,24 @@ namespace ast {
         std::vector<std::shared_ptr<base>> data;
     };
 
-    struct table : public base {
-        explicit table(bool recursive) : base(), recursive(recursive) {}
+    struct binds : virtual public base {
+        explicit binds(bool recursive) : base(), recursive(recursive) {};
+        virtual void stream(std::ostream& o) const override {
+            for (auto iter = data.cbegin(); iter != data.cend(); ++iter)
+                o << *(iter->first) << " = " << iter->second << "; ";
+        }
+        std::vector<std::pair<std::shared_ptr<ast::name>, std::shared_ptr<ast::base>>> data;
+        bool recursive;
+    };
+
+    struct table : public binds {
+        explicit table(bool recursive) : binds(recursive) {}
         virtual void stream(std::ostream& o) const override {
             if (recursive) o << "rec ";
             o << "{ ";
-            for (auto iter = data.cbegin(); iter != data.cend(); ++iter)
-                o << *(iter->first) << " = " << iter->second << "; ";
+            binds::stream(o);
             o << "}";
         }
-        bool recursive;
-        std::vector<std::pair<std::shared_ptr<ast::name>, std::shared_ptr<ast::base>>> data;
     };
 
     struct array : public base {
@@ -119,6 +139,29 @@ namespace ast {
             o << "]";
         }
         std::vector<std::shared_ptr<ast::base>> data;
+    };
+
+    struct statement : virtual public base {
+        explicit statement() = default;
+    };
+
+    struct let : public binds, public statement {
+        explicit let() : binds(true) {}
+        virtual void stream(std::ostream& o) const override {
+            o << "let ";
+            binds::stream(o);
+            o << "in ";
+        }
+    };
+
+    struct expression : public base {
+        explicit expression() : base() {}
+        virtual void stream(std::ostream& o) const override {
+            for (const auto& s : statements) o << *s;
+            o << *value;
+        }
+        std::vector<std::shared_ptr<ast::statement>> statements;
+        std::shared_ptr<ast::base> value;
     };
 
 } // namespace ast
@@ -135,15 +178,22 @@ namespace state {
     };
 
     struct expression : base {
-        std::shared_ptr<ast::base> result;
+        std::shared_ptr<ast::expression> result = std::make_shared<ast::expression>();
+        void push_statement() {
+            assert(value);
+            auto is_statement = std::dynamic_pointer_cast<ast::statement>(value);
+            assert(is_statement);
+            result->statements.push_back(std::move(is_statement));
+        }
         void success(base& in_result) {
             assert(!in_result.value);
-            assert(result);
-            assert(!value);
-//XXX: unwrap trivial expressions
-            //if (auto is_name = std::dynamic_pointer_cast<ast::name>(result))
-            //    result = std::move(is_name
-            in_result.value = std::move(result);
+            assert(value);
+            if (result->statements.empty())
+                in_result.value = std::move(value);
+            else {
+                result->value = std::move(value);
+                in_result.value = std::move(result);
+            }
         }
     };
 
@@ -195,19 +245,21 @@ namespace state {
         }
     };
 
-    struct table : base {
+    struct binds : base {
         std::vector<std::pair<std::shared_ptr<ast::name>, std::shared_ptr<ast::base>>> data;
         std::shared_ptr<ast::name> key;
-        std::shared_ptr<ast::name> from;
+        std::shared_ptr<ast::base> from;
 
         void push_back() {
             assert(key);
             assert(value);
             if (from) {
-                if (auto is_name = std::dynamic_pointer_cast<ast::name>(value))
-                    value = std::make_shared<ast::name>(from->data + "." + is_name->data);
-                else
-                    assert(false);
+// XXX: ^_^
+                std::stringstream t;
+                t << from;
+                t << ".";
+                t << value;
+                value = std::make_shared<ast::name>(t.str());
             }
             data.emplace_back(std::move(key), std::move(value));
             key.reset();
@@ -217,7 +269,7 @@ namespace state {
         void success(base& in_result) {
             assert(!value);
             assert(in_result.value);
-            auto is_table = std::dynamic_pointer_cast<ast::table>(in_result.value);
+            auto is_table = std::dynamic_pointer_cast<ast::binds>(in_result.value);
             assert(is_table);
             is_table->data = std::move(data);
         }
@@ -232,7 +284,6 @@ namespace state {
         };
 
         void success(base& in_result) {
-        std::cout << "state::array::success" << std::endl;
             assert(!in_result.value);
             assert(!value);
             in_result.value = std::move(data);
@@ -498,10 +549,18 @@ namespace keyword {
     template<typename Rule>
     struct action : pegtl::nothing<Rule> {};
 
+//    template<> struct action<grammar> {
+//        template<typename Input> static void apply(const Input& in, state::expression& state) {
+//            auto is_expression = std::dynamic_pointer_cast<ast::expression>(state.value);
+//            assert(is_expression);
+//            state.value = std::move(is_expression);
+//        }
+//    };
+
 
     template<> struct action<expr_negate_val> {
         template<typename Input>
-        static void apply(const Input& in, state::expression& state) {
+        static void apply(const Input& in, state::base& state) {
             assert(state.value);
             state.value = std::make_shared<ast::negate>(std::move(state.value));
         }
@@ -510,10 +569,10 @@ namespace keyword {
 
     namespace actions {
         template<typename Rule>
-        struct table : action<Rule> {};
+        struct binds : action<Rule> {};
 
-        template<> struct table<bind_eq_operator> {
-            template<typename Input> static void apply(const Input& in, state::table& state) {
+        template<> struct binds<bind_eq_operator> {
+            template<typename Input> static void apply(const Input& in, state::binds& state) {
                 assert(!state.key);
                 assert(state.value);
                 if (auto is_name = std::dynamic_pointer_cast<ast::name>(state.value))
@@ -524,8 +583,8 @@ namespace keyword {
             }
         };
 
-        template<> struct table<bind_inherit_attrname> {
-            template<typename Input> static void apply(const Input& in, state::table& state) {
+        template<> struct binds<bind_inherit_attrname> {
+            template<typename Input> static void apply(const Input& in, state::binds& state) {
                 assert(!state.key);
                 assert(state.value);
                 if (auto is_name = std::dynamic_pointer_cast<ast::name>(state.value))
@@ -536,30 +595,29 @@ namespace keyword {
             }
         };
 
-        template<> struct table<bind_inherit_from> {
-            template<typename Input> static void apply(const Input& in, state::table& state) {
+        template<> struct binds<bind_inherit_from> {
+            template<typename Input> static void apply(const Input& in, state::binds& state) {
                 assert(state.value);
-                if (auto is_name = std::dynamic_pointer_cast<ast::name>(state.value))
-                    state.from = std::move(is_name);
+                state.from = std::move(state.value);
 
                 assert(state.from);
             }
         };
 
-        template<> struct table<keyword::key_inherit> {
-            template<typename Input> static void apply(const Input& in, state::table& state) {
+        template<> struct binds<keyword::key_inherit> {
+            template<typename Input> static void apply(const Input& in, state::binds& state) {
                 state.value.reset();
             }
         };
 
-        template<> struct table<bind_eq> {
-            template<typename Input> static void apply(const Input& in, state::table& state) {
+        template<> struct binds<bind_eq> {
+            template<typename Input> static void apply(const Input& in, state::binds& state) {
                 state.push_back();
             }
         };
 
-        template<> struct table<bind_inherit> {
-            template<typename Input> static void apply(const Input& in, state::table& state) {
+        template<> struct binds<bind_inherit> {
+            template<typename Input> static void apply(const Input& in, state::binds& state) {
                 state.from.reset();
             }
         };
@@ -624,7 +682,7 @@ namespace keyword {
     template<typename x> struct control::normal<expr_sum_apply<x>> : pegtl::change_state_and_action<expr_sum_apply<x>, state::sum, actions::sum, pegtl::normal> {};
     template<> struct control::normal<expr_product_apply> : pegtl::change_state_and_action<expr_product_apply, state::product, actions::product, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
-    template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::table, actions::table, pegtl::normal> {};
+    template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
 
 
 
@@ -704,7 +762,7 @@ namespace keyword {
     template<> struct action<keyword::key_let> {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
-            state.value = std::make_shared<ast::table>(true);
+            state.value = std::make_shared<ast::let>();
         }
     };
 
@@ -715,15 +773,11 @@ namespace keyword {
         }
     };
 
-    template<typename x> struct action<expression<x>> {
-        template<typename Input>
-        static void apply(const Input& in, state::expression& state) {
-            assert(state.value);
-            assert(!state.result);
-            state.result = std::move(state.value);
+    template<> struct action<statement> {
+        template<typename Input> static void apply(const Input& in, state::expression& state) {
+            state.push_statement();
         }
     };
-
 
 
 //    template<> const std::string errors<expr_negate<number>>::error_message = "incomplete negate expression, expected number";
