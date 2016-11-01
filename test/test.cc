@@ -34,7 +34,7 @@ bool parse(Str&& str, Args&&... args) {
 template<typename R>
 R compare(nix::parser::state::expression& state) {
     std::stringstream s;
-    s << state.result;
+    s << state.value;
     R r;
     s >> r;
     return r;
@@ -43,15 +43,15 @@ R compare(nix::parser::state::expression& state) {
 template<>
 std::string compare(nix::parser::state::expression& state) {
     std::stringstream s;
-    s << state.result;
+    s << state.value;
     return s.str();
 }
 
 template<typename R, typename A>
 R compare_downcast(nix::parser::state::expression& state) {
-    auto downcast = std::dynamic_pointer_cast<A>(state.result);
+    auto downcast = std::dynamic_pointer_cast<A>(state.value);
     if (!downcast) {
-        auto val = state.result;
+        auto val = state.value;
         std::stringstream msg("expected ");
         msg << typeid(A).name();
         msg << ", but got type=";
@@ -81,15 +81,15 @@ TEST_CASE("grammar analysis") {
 TEST_CASE("comments") {
     nix::parser::state::expression result;
     SECTION("single line comment") {
-        REQUIRE(parse("1# single line string", result));
+        REQUIRE(parse("1# single line comment", result));
         REQUIRE(compare<int>(result) == 1);
     }
     SECTION("multi line comment") {
-        REQUIRE(parse("4/* multi \n line \n string */", result));
+        REQUIRE(parse("4/* multi \n line \n comment */", result));
         REQUIRE(compare<int>(result) == 4);
     }
     SECTION("multi line comment") {
-        REQUIRE(parse("/* multi \n line \n string */16", result));
+        REQUIRE(parse("/* multi \n line \n comment */16", result));
         REQUIRE(compare<int>(result) == 16);
     }
 }
@@ -120,7 +120,7 @@ TEST_CASE("boolean expression") {
 }
 
 template<typename S, typename R>
-void check(S&& str, R& expect) {
+void check(S&& str, const R& expect) {
     SECTION(str) {
         nix::parser::state::expression result;
         REQUIRE(parse(str, result));
@@ -141,9 +141,9 @@ TEST_CASE("strings") {
 //    check("\"shortstring with dollarcurlys ${true}${true}\""s);
 //    check("\"shortstring with dollarcurly ${\"with inner string\"}\""s);
 //    check("\"shortstring with nested dollarcurly ${\"[outer,${\"<inner>\"}]\"}\""s);
-    check("''''"s);
-    check("''longstring''"s);
-    check("''longstring with ''' escape''"s);
+    check("''''"s, "\"\""s);
+    check("''longstring''"s, "\"longstring\""s);
+//    check("''longstring with ''' escape''"s, "\"longstring with ' escape\""s);
 }
 
 
@@ -248,10 +248,11 @@ TEST_CASE("table") {
     check("rec { a = 1; }"s);
     check("{ a = 1; b = \"c\"; }"s);
     check("{ a = 1; b = \"c\"; c = foobar; }"s);
-    check("{ inherit a; }"s);
-    check("{ inherit a b; }"s);
-    check("{ inherit (a) b; }"s);
-    check("{ inherit (a) b c; }"s);
+    check("{ inherit a; }"s, "{ a = a; }"s);
+    check("{ inherit a b; }"s, "{ a = a; b = b; }"s);
+    check("{ inherit (a) b; }"s, "{ b = a.b; }"s);
+    check("{ inherit (a) b c; }"s, "{ b = a.b; c = a.c; }"s);
+    check("{ inherit (a) b; inherit c; inherit (d) e; }"s, "{ b = a.b; c = c; e = d.e; }"s);
 }
 
 TEST_CASE("table merge") {
