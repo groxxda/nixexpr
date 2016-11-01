@@ -148,31 +148,12 @@ TEST_CASE("arithmetic sum") {
 }
 
 TEST_CASE("arithmetic product") {
-    nix::parser::state::expression result;
-    SECTION("23 * 42") {
-        REQUIRE(parse("23 * 42", result));
-        REQUIRE(compare<std::string>(result) == "(23*42)");
-    }
-    SECTION("-23 * 42") {
-        REQUIRE(parse("-23 * 42", result));
-        REQUIRE(compare<std::string>(result) == "((-23)*42)");
-    }
-    SECTION("23 * -42") {
-        REQUIRE(parse("23 * -42", result));
-        REQUIRE(compare<std::string>(result) == "(23*(-42))");
-    }
-    SECTION("1 * 2 * 3") {
-        REQUIRE(parse("1 * 2 * 3", result));
-        REQUIRE(compare<std::string>(result) == "(1*2*3)");
-    }
-    SECTION("1 * -2 * 3") {
-        REQUIRE(parse("1 * -2 * 3", result));
-        REQUIRE(compare<std::string>(result) == "(1*(-2)*3)");
-    }
-    SECTION("1 / -2") {
-        REQUIRE(parse("1 / -2", result));
-        REQUIRE(compare<std::string>(result) == "(1*(1/(-2)))");
-    }
+    check("23 * 42", "(23*42)"s);
+    check("-23 * 42", "((-23)*42)"s);
+    check("23 * -42", "(23*(-42))"s);
+    check("1 * 2 * 3", "(1*2*3)"s);
+    check("1 * -2 * 3", "(1*(-2)*3)"s);
+    check("1 / -2",  "(1*(1/(-2)))"s);
 }
 
 TEST_CASE("arithmetic mixed") {
