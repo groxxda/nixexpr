@@ -259,16 +259,19 @@ TEST_CASE("table merge") {
     //check("{ } // {}"s);
 }
 
-//
-//TEST_CASE("array") {
-//    CHECK(parse("[]"));
-//    CHECK(parse("[ ]"));
-//    CHECK(parse("[] ++ []"));
-//    CHECK(parse("[ 1 ]"));
-//    CHECK(parse("[ 1 \"b\" ]"));
-//    CHECK(parse("[ 1 \"b\" c ]"));
-//}
-//
+
+TEST_CASE("array") {
+    check("[]"s, "[ ]"s);
+    check("[ ]"s);
+    check("[ 1 ]"s);
+    check("[ 1 \"b\" ]"s);
+    check("[ 1 \"b\" c ]"s);
+}
+
+TEST_CASE("array merge") {
+    //check("[] ++ []"));
+}
+
 //TEST_CASE("parameter") {
 //    CHECK(parse("a: 1"));
 //    CHECK(parse("a: b: 1"));
