@@ -71,6 +71,20 @@ template<> int compare(nix::parser::state::expression& state) { return compare_d
 
 template<> bool compare(nix::parser::state::expression& state) { return compare_downcast<bool, nix::ast::boolean>(state); }
 
+template<typename S, typename R>
+void check(S&& str, const R& expect) {
+    SECTION(str) {
+        nix::parser::state::expression result;
+        REQUIRE(parse(str, result));
+        REQUIRE(compare<R>(result) == expect);
+    }
+}
+
+template<typename S>
+void check(S&& str) {
+    check<>(str, str);
+}
+
 #if 0
 TEST_CASE("grammar analysis") {
     const size_t issues_found = pegtl::analyze<grammar>();
@@ -95,42 +109,11 @@ TEST_CASE("comments") {
 }
 
 TEST_CASE("boolean expression") {
-    nix::parser::state::expression result;
-    SECTION("true") {
-        REQUIRE(parse("true", result));
-        REQUIRE(compare<bool>(result) == true);
-    }
-    SECTION("false") {
-        REQUIRE(parse("false", result));
-        REQUIRE(compare<bool>(result) == false);
-    }
-    SECTION("!true") {
-        REQUIRE(parse("!true", result));
-        REQUIRE(compare<bool>(result) == false);
-    }
-    SECTION("!\ttrue") {
-        REQUIRE(parse("!\ttrue", result));
-        REQUIRE(compare<bool>(result) == false);
-    }
-//    SECTION("!(true)") {
-//        REQUIRE(parse("!(true)", result));
-//        REQUIRE(compare<bool>(result) == false);
-//    }
-    //CHECK(parse("!(\"a\")"));
-}
-
-template<typename S, typename R>
-void check(S&& str, const R& expect) {
-    SECTION(str) {
-        nix::parser::state::expression result;
-        REQUIRE(parse(str, result));
-        REQUIRE(compare<R>(result) == expect);
-    }
-}
-
-template<typename S>
-void check(S&& str) {
-    check<>(str, str);
+    check("true", true);
+    check("false", false);
+    check("!true", false);
+    check("!\ttrue", false);
+    check("!(true)", false);
 }
 
 TEST_CASE("strings") {

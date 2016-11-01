@@ -344,7 +344,6 @@ namespace keyword {
     template<typename CTX = void>
     struct expression;
 
-    // TODO: optimize with until<>
     struct formal : pegtl::seq<padr<name>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, expression<>>>> {};
     struct formals_nonempty : pegtl::seq<pegtl::list<formal, padr<pegtl::one<','>>>, pegtl::opt<padr<pegtl::one<','>>, pegtl::opt<keyword::key_ellipsis>>> {};
     struct formals : pegtl::opt<pegtl::sor<keyword::key_ellipsis, formals_nonempty>> {};
