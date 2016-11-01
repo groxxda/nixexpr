@@ -134,19 +134,9 @@ TEST_CASE("bla") {
 
 
 TEST_CASE("number") {
-    nix::parser::state::expression result;
-    SECTION("1337") {
-        REQUIRE(parse("1337", result));
-        REQUIRE(compare<long long>(result) == 1337);
-    }
-    SECTION("-1337") {
-        REQUIRE(parse("-1337", result));
-        REQUIRE(compare<std::string>(result) == "(-1337)");
-    }
-    SECTION("--1337") {
-        REQUIRE(parse("--1337", result));
-        REQUIRE(compare<std::string>(result) == "1337");
-    }
+    check("1337", 1337);
+    check("-1337"s, "(-1337)"s);
+    check("--1337", 1337);
 }
 
 TEST_CASE("arithmetic sum") {
