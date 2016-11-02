@@ -31,7 +31,7 @@ bool parse(Str&& str, Args&&... args) {
 }
 
 template<typename R>
-R compare(nix::parser::state::expression& state) {
+R compare(nix::parser::state::base& state) {
     std::stringstream s;
     s << state.value;
     R r;
@@ -40,14 +40,14 @@ R compare(nix::parser::state::expression& state) {
 }
 
 template<>
-std::string compare(nix::parser::state::expression& state) {
+std::string compare(nix::parser::state::base& state) {
     std::stringstream s;
     s << state.value;
     return s.str();
 }
 
 template<typename R, typename A>
-R compare_downcast(nix::parser::state::expression& state) {
+R compare_downcast(nix::parser::state::base& state) {
 
     auto downcast = std::dynamic_pointer_cast<A>(state.value);
     if (!downcast) {
@@ -67,14 +67,14 @@ R compare_downcast(nix::parser::state::expression& state) {
     return downcast->data;
 }
 
-template<> int compare(nix::parser::state::expression& state) { return compare_downcast<int, nix::ast::number>(state); }
+template<> int compare(nix::parser::state::base& state) { return compare_downcast<int, nix::ast::number>(state); }
 
-template<> bool compare(nix::parser::state::expression& state) { return compare_downcast<bool, nix::ast::boolean>(state); }
+template<> bool compare(nix::parser::state::base& state) { return compare_downcast<bool, nix::ast::boolean>(state); }
 
 template<typename S, typename R>
 void check(S&& str, const R& expect) {
     SECTION(str) {
-        nix::parser::state::expression result;
+        nix::parser::state::base result;
         REQUIRE(parse(str, result));
         REQUIRE(compare<R>(result) == expect);
     }
@@ -85,7 +85,7 @@ void check(S&& str) {
     check<>(str, str);
 }
 
-#define CHECK_AST(expr, ast) SECTION(expr) { nix::parser::state::expression result; REQUIRE(parse(expr, result)); REQUIRE(ast == result.value); }
+#define CHECK_AST(expr, ast) SECTION(expr) { nix::parser::state::base result; REQUIRE(parse(expr, result)); REQUIRE(ast == result.value); }
 
 
 
@@ -93,6 +93,7 @@ void check(S&& str) {
 std::shared_ptr<nix::ast::base> boolean(bool v) { return std::make_shared<nix::ast::boolean>(v); }
 std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<nix::ast::string>(v); }
 std::shared_ptr<nix::ast::base> number(long long v) { return std::make_shared<nix::ast::number>(v); }
+std::shared_ptr<nix::ast::name> name(std::string v) { return std::make_shared<nix::ast::name>(v); }
 std::shared_ptr<nix::ast::base> not_(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::not_>(v); }
 std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::negate>(v); }
 std::shared_ptr<nix::ast::base> add(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::add>(lhs, rhs); }
@@ -102,6 +103,8 @@ std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs, std::sh
 std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::or_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::and_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::impl>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> assertion(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::assertion>(what, expr); }
+std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::name> arg, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::function>(arg, expr); }
 
 
 
@@ -208,6 +211,10 @@ TEST_CASE("table merge") {
     //check("{ } // {}"s);
 }
 
+TEST_CASE("function") {
+    CHECK_AST("a: 1", function(name("a"), number(1)));
+}
+
 
 TEST_CASE("array") {
     check("[]"s, "[ ]"s);
@@ -229,6 +236,13 @@ TEST_CASE("let in") {
     check("let inherit(x) y; in 1"s, "let y = x.y; in 1"s);
     check("let inherit (x) y z; in 1"s, "let y = x.y; z = x.z; in 1"s);
     check("let inherit ({a=1;}) a b; in 1"s, "let a = { a = 1; }.a; b = { a = 1; }.b; in 1"s);
+}
+
+TEST_CASE("assert") {
+    auto t = boolean(true);
+    auto a = name("a");
+    CHECK_AST("assert true; a", assertion(t, a));
+    CHECK_AST("assert true; assert true && true; a", assertion(t, assertion(and_(t,t), a)));
 }
 
 //TEST_CASE("parameter") {

@@ -22,9 +22,13 @@ namespace ast {
         virtual bool operator==(const base& o) const {
             std::stringstream msg;
             msg << "don't know how to compare ";
-            msg << typeid(this).name();
+            msg << typeid(*this).name();
+            msg << ": ";
+            stream(msg);
             msg << " and ";
             msg << typeid(o).name();
+            msg << ": ";
+            o.stream(msg);
             throw msg.str();
         }
     protected:
@@ -62,6 +66,7 @@ namespace ast {
     struct name : public base {
         explicit name(std::string in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << data; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const name*>(o); return cast && data == cast->data; }
         std::string data;
     };
 
@@ -139,30 +144,31 @@ namespace ast {
         std::vector<std::shared_ptr<ast::base>> data;
     };
 
-    struct statement : virtual public base { };
+    struct statement : virtual public base {
+        explicit statement(const std::shared_ptr<ast::base> expr) : base(), expr(expr) {}
+        virtual bool operator==(const statement* o) const { return expr == o->expr; }
+        const std::shared_ptr<ast::base> expr;
+    };
 
     struct let : public binds, public statement {
-        explicit let() : binds(true) {}
+        explicit let(std::shared_ptr<ast::base> expr) : binds(true), statement(expr) {}
         virtual void stream(std::ostream& o) const override { o << "let "; binds::stream(o); o << "in "; }
     };
 
     struct function : public statement {
-        explicit function() : base() {}
-        virtual void stream(std::ostream& o) const override { o << argument << ": " << data; }
-        virtual bool operator==(const base* o) { auto cast = dynamic_cast<const function*>(o); return cast && data == cast->data; }
-        std::shared_ptr<ast::name> argument;
-        std::shared_ptr<ast::base> data;
+        explicit function(std::shared_ptr<ast::base> argument, std::shared_ptr<ast::base> expr) : statement(expr), argument(argument) {}
+        virtual void stream(std::ostream& o) const override { o << argument << ": " << expr; }
+        virtual bool operator==(const base* o) { auto cast = dynamic_cast<const function*>(o); return cast && argument == cast->argument && expr == cast->expr; }
+        const std::shared_ptr<ast::base> argument;
     };
 
-    struct expression : public base {
-        explicit expression() : base() {}
-        virtual void stream(std::ostream& o) const override {
-            for (const auto& s : statements) o << *s;
-            o << *value;
-        }
-        std::vector<std::shared_ptr<ast::statement>> statements;
-        std::shared_ptr<ast::base> value;
+    struct assertion : public statement {
+        explicit assertion(const std::shared_ptr<ast::base> what, const std::shared_ptr<ast::base> expr) : statement(expr), what(what) {}
+        virtual void stream(std::ostream& o) const override { o << "assert " << what << "; " << expr; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const assertion*>(o); return cast && statement::operator==(cast) && what == cast->what; }
+        const std::shared_ptr<ast::base> what;
     };
+
 
 } // namespace ast
 
@@ -175,30 +181,18 @@ namespace state {
         base(const base&) = delete;
         void operator=(const base&) = delete;
         std::shared_ptr<ast::base> value;
-    };
-
-    struct expression : base {
-        std::shared_ptr<ast::expression> result = std::make_shared<ast::expression>();
-        void push_statement() {
-            assert(value);
-            auto is_statement = std::dynamic_pointer_cast<ast::statement>(value);
-            assert(is_statement);
-            result->statements.push_back(std::move(is_statement));
-        }
         void success(base& in_result) {
             assert(!in_result.value);
             assert(value);
-            if (result->statements.empty())
-                in_result.value = std::move(value);
-            else {
-                result->value = std::move(value);
-                in_result.value = std::move(result);
-            }
+            in_result.value = std::move(value);
         }
     };
 
     template<typename T>
     struct binary_expression : base {
+        void start(base& in_result) {
+            std::cout << "starting binary_expression " << this << std::endl;
+        }
         void success(base& in_result) {
             assert(in_result.value);
             assert(value);
@@ -494,18 +488,27 @@ namespace keyword {
     //struct expr_import : pegtl::if_must<keyword::key_import, padr<pegtl::sor<path, spath, string, name, expr_select>>, pegtl::opt<expr_applying<expr_applying_tail>>> {};
 
 
-    struct assert : pegtl::if_must<keyword::key_assert, expression<boolean>, padr<pegtl::one<';'>>> {};
+    template<typename CTX>
+    struct assert_apply : expression<CTX> {};
+    template<typename CTX>
+    struct assert : pegtl::if_must<keyword::key_assert, expression<boolean>, padr<pegtl::one<';'>>, assert_apply<CTX>> {};
+
 // todo: restrict context?
-    struct with : pegtl::if_must<keyword::key_with, expression<>, padr<pegtl::one<';'>>> {};
-    struct let : pegtl::if_must<keyword::key_let, binds<keyword::key_in>> {};
+    template<typename CTX>
+    struct with : pegtl::if_must<keyword::key_with, expression<>, padr<pegtl::one<';'>>, expression<CTX>> {};
+    template<typename CTX>
+    struct let : pegtl::if_must<keyword::key_let, binds<keyword::key_in>, expression<CTX>> {};
+    template<typename CTX>
+    struct function : pegtl::if_must<arguments, expression<CTX>> {};
 
-    struct statement : pegtl::sor<assert, with, let, arguments> {}; // seq<.., /*expr_import,*/>
-    struct statement_list : pegtl::star<statement> {};
+    template<typename CTX>
+    struct statement : pegtl::sor<assert<CTX>, with<CTX>, let<CTX>, function<CTX>> {}; // seq<.., /*expr_import,*/>
+//    struct statement_list : pegtl::star<statement> {};
 
-    template<> struct expression<void> : pegtl::seq<statement_list, pegtl::sor<expr_if<void>, expr_impl<void>>> {};
-    template<> struct expression<boolean> : pegtl::seq<statement_list, pegtl::sor<expr_if<boolean>, expr_impl<boolean>>> {};
-    template<> struct expression<string> : pegtl::seq<statement_list, pegtl::sor<expr_if<string>, expr_add>> {};
-    template<> struct expression<table> : pegtl::seq<statement_list, pegtl::sor<expr_if<table>, expr_setplus<table>>> {};
+    template<> struct expression<void> : pegtl::sor<statement<void>, expr_if<void>, expr_impl<void>> {};
+    template<> struct expression<boolean> : pegtl::sor<statement<boolean>, expr_if<boolean>, expr_impl<boolean>> {};
+    template<> struct expression<string> : pegtl::sor<statement<string>, expr_if<string>, expr_add> {};
+    template<> struct expression<table> : pegtl::sor<statement<table>, expr_if<table>, expr_setplus<table>> {};
 
 
     struct grammar : pegtl::must<seps, expression<>, pegtl::eof> {};
@@ -590,7 +593,7 @@ namespace keyword {
     } // namespace actions
 
 
-    template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::expression, action, pegtl::tracer> {};
+    template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::base, action, pegtl::tracer> {};
     template<> struct control::normal<expr_add_apply> : pegtl::change_state<expr_add_apply, state::binary_expression<ast::add>, pegtl::normal> {};
     template<> struct control::normal<expr_sub_apply> : pegtl::change_state<expr_sub_apply, state::binary_expression<ast::sub>, pegtl::normal> {};
     template<> struct control::normal<expr_mul_apply> : pegtl::change_state<expr_mul_apply, state::binary_expression<ast::mul>, pegtl::normal> {};
@@ -600,6 +603,7 @@ namespace keyword {
     template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
+    template<typename x> struct control::normal<assert_apply<x>> : pegtl::change_state<assert_apply<x>, state::binary_expression<ast::assertion>, pegtl::normal> {};
 
 
 
@@ -681,12 +685,12 @@ namespace keyword {
         }
     };
 
-    template<> struct action<keyword::key_let> {
-        template<typename Input>
-        static void apply(const Input& in, state::base& state) {
-            state.value = std::make_shared<ast::let>();
-        }
-    };
+//    template<> struct action<keyword::key_let> {
+//        template<typename Input>
+//        static void apply(const Input& in, state::base& state) {
+//            state.value = std::make_shared<ast::let>();
+//        }
+//    };
 
     template<> struct action<table_begin_nonrecursive> {
         template<typename Input>
@@ -695,9 +699,10 @@ namespace keyword {
         }
     };
 
-    template<> struct action<statement> {
-        template<typename Input> static void apply(const Input& in, state::expression& state) {
-            state.push_statement();
+    template<typename x> struct action<statement<x>> {
+        template<typename Input> static void apply(const Input& in, state::base& state) {
+            std::cout << "action<statement<x>>";
+            //state.push_statement();
         }
     };
 
