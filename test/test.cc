@@ -85,9 +85,18 @@ void check(S&& str) {
     check<>(str, str);
 }
 
-#define CHECK_AST(expr, ast) SECTION(expr) { nix::parser::state::expression result; REQUIRE(parse(expr, result)); REQUIRE(ast == result.value.get()); }
+#define CHECK_AST(expr, ast) SECTION(expr) { nix::parser::state::expression result; REQUIRE(parse(expr, result)); REQUIRE(ast == result.value); }
 
-using namespace nix::ast;
+
+
+
+std::shared_ptr<nix::ast::base> boolean(bool v) { return std::make_shared<nix::ast::boolean>(v); }
+std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<nix::ast::string>(v); }
+std::shared_ptr<nix::ast::base> number(long long v) { return std::make_shared<nix::ast::number>(v); }
+std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::negate>(v); }
+std::shared_ptr<nix::ast::base> plus(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::plus>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> minus(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::minus>(lhs, rhs); }
+
 
 
 #if 0
@@ -137,9 +146,6 @@ TEST_CASE("bla") {
 }*/
 
 
-
-
-
 TEST_CASE("number") {
     check("1337", 1337);
     check("-1337"s, "(-1337)"s);
@@ -149,11 +155,11 @@ TEST_CASE("number") {
 
 TEST_CASE("arithmetic sum") {
     check("-23 + 42", "((-23)+42)"s);
-    check("23 - 42", "(23+(-42))"s);
-    check("23 - -42", "(23+42)"s);
-    check("1 + 2 + 3", "(1+2+3)"s);
-    check("1 - 2 - 3", "(1+(-2)+(-3))"s);
-    CHECK_AST("1 + 2 + 3", sum(1,2,3));
+    check("23 - 42", "(23-42)"s);
+    check("23 - -42", "(23-(-42))"s);
+    check("1 + 2 + 3", "((1+2)+3)"s);
+    CHECK_AST("1 + 2 + 3", plus(plus(number(1), number(2)),number(3)));
+    check("1 - 2 - 3", "((1-2)-3)"s);
 }
 
 TEST_CASE("arithmetic product") {

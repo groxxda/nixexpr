@@ -19,7 +19,14 @@ namespace ast {
     struct base {
         virtual void stream(std::ostream&) const = 0;
         virtual bool operator==(const base* o) const { return o && o->operator==(*this); }
-        virtual bool operator==(const base& o) const { throw "dont know how to compare base types.."; }
+        virtual bool operator==(const base& o) const {
+            std::stringstream msg;
+            msg << "don't know how to compare ";
+            msg << typeid(this).name();
+            msg << " and ";
+            msg << typeid(o).name();
+            throw msg.str();
+        }
     protected:
         explicit base() {}
         ~base() {}
@@ -87,20 +94,18 @@ namespace ast {
         std::shared_ptr<base> data;
     };
 
-    struct sum : public base {
-        explicit sum() : base() {};
-        template<typename... A>
-        explicit sum(A... a) : base(), data{std::make_shared<number>(a)...} {};
-        virtual void stream(std::ostream& o) const override {
-            o << "(";
-            auto iter = data.cbegin();
-            o << *iter;
-            while (++iter != data.cend()) o << "+" << *iter;
-            o << ")";
-        }
-        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const sum*>(o); return cast && data == cast->data; }
-        std::vector<std::shared_ptr<base>> data;
+    template<char op>
+    struct binary_expression : public base {
+        explicit binary_expression(std::shared_ptr<base> lhs, std::shared_ptr<base> rhs) : base(), lhs(lhs), rhs(rhs) {}
+        virtual void stream(std::ostream& o) const override { o << "(" << lhs << op << rhs << ")"; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const binary_expression<op>*>(o); return cast && lhs == cast->lhs && rhs == cast->rhs; }
+        std::shared_ptr<base> lhs;
+        std::shared_ptr<base> rhs;
     };
+
+    struct plus : public binary_expression<'+'> { using binary_expression<'+'>::binary_expression; };
+
+    struct minus : public binary_expression<'-'> { using binary_expression<'-'>::binary_expression; };
 
     struct product : public base {
         explicit product() : base() {}
@@ -202,27 +207,12 @@ namespace state {
         }
     };
 
-    struct sum : base {
-        std::shared_ptr<ast::sum> sum = std::make_shared<ast::sum>();
-        bool next_neg = false;
-        void push_back() {
-            assert(value);
-            if (next_neg) {
-//                auto is_negated = std::dynamic_pointer_cast<ast::negate>(value);
-//                if (is_negated)
-//                    value = std::move(is_negated->data);
-//                else
-                    value = std::make_shared<ast::negate>(std::move(value));
-                next_neg = false;
-            }
-            sum->data.push_back(std::move(value));
-            value.reset();
-        }
+    template<typename T>
+    struct binary_expression : base {
         void success(base& in_result) {
             assert(in_result.value);
-            sum->data.insert(sum->data.begin(), std::move(in_result.value));
-            assert(!this->value);
-            in_result.value = sum;
+            assert(value);
+            in_result.value = std::make_shared<T>(in_result.value, value);
         }
     };
 
@@ -480,21 +470,22 @@ namespace keyword {
     struct expr_product : pegtl::seq<expr_arrayconcat<CTX>, pegtl::opt<expr_product_apply>> {};
     //template<> struct expr_product<number> : left_assoc<expr_negate<number>, operators_product> {};
 
-    struct operators_sum_plus : padr<pegtl::one<'+'>> {};
+
+
     struct operators_sum_minus : op_one<'-', '>'> {};
-    struct operators_sum : pegtl::sor<operators_sum_plus, operators_sum_minus> {};
-    template<typename CTX>
-    struct expr_sum_val : expr_product<CTX> {};
-    template<typename CTX>
-    struct expr_sum_apply : pegtl::plus<pegtl::if_must<operators_sum, expr_sum_val<CTX>>> {};
-    template<typename CTX>
-    struct expr_sum : pegtl::seq<expr_product<CTX>, pegtl::opt<expr_sum_apply<CTX>>> {};
-    //template<> struct expr_sum<string> : left_assoc<expr_apply<string>, operators_sum_plus, expr_apply<string>> {};
+    struct expr_sum_minus_apply : pegtl::if_must<operators_sum_minus, expr_product<void>> {};
+    struct expr_sum_minus : pegtl::seq<expr_product<void>, pegtl::star<expr_sum_minus_apply>> {};
+
+
+    struct operators_sum_plus : padr<pegtl::one<'+'>> {};
+    struct expr_sum_plus_apply : pegtl::if_must<operators_sum_plus, expr_sum_minus> {};
+    struct expr_sum : pegtl::seq<expr_sum_minus, pegtl::star<expr_sum_plus_apply>> {};
+
 
     struct operator_not : padr<pegtl::one<'!'>> {};
     struct operator_not_double : pegtl::rep<2, operator_not> {};
     struct expr_not_val : expr_attrtest {};
-    struct expr_not : pegtl::seq<pegtl::star<operator_not_double>, pegtl::if_then_else<operator_not, expr_not_val, expr_sum<void>>> {};
+    struct expr_not : pegtl::seq<pegtl::star<operator_not_double>, pegtl::if_then_else<operator_not, expr_not_val, expr_sum>> {};
 
     template<typename CTX>
     struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>, expr_apply<table>> {};
@@ -502,7 +493,7 @@ namespace keyword {
 
     struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>>> {};
     template<typename CTX>
-    struct expr_ordering : left_assoc<expr_setplus<CTX>, operators_ordering, expr_sum<number>> {};
+    struct expr_ordering : left_assoc<expr_setplus<CTX>, operators_ordering, expr_sum> {};
     //template<> struct expr_ordering<number> : left_assoc<expr_sum<number>, operators_ordering> {};
 
     struct operators_equality : padr<pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>>> {};
@@ -538,7 +529,7 @@ namespace keyword {
 
     template<> struct expression<void> : pegtl::seq<statement_list, pegtl::sor<expr_if<void>, expr_impl<void>>> {};
     template<> struct expression<boolean> : pegtl::seq<statement_list, pegtl::sor<expr_if<boolean>, expr_impl<boolean>>> {};
-    template<> struct expression<string> : pegtl::seq<statement_list, pegtl::sor<expr_if<string>, expr_sum<string>>> {};
+    template<> struct expression<string> : pegtl::seq<statement_list, pegtl::sor<expr_if<string>, expr_sum>> {};
     template<> struct expression<table> : pegtl::seq<statement_list, pegtl::sor<expr_if<table>, expr_setplus<table>>> {};
 
 
@@ -639,29 +630,8 @@ namespace keyword {
 
 
         template<typename Rule>
-        struct sum : action<Rule> {};
+        struct binary_expression : action<Rule> {};
 
-        template<> struct sum<expr_negate_val> {
-            template<typename Input>
-            static void apply(const Input& in, state::sum& state) {
-                assert(state.value);
-                state.next_neg = !state.next_neg;
-            }
-        };
-
-        template<> struct sum<operators_sum_minus> {
-            template<typename Input>
-            static void apply(const Input& in, state::sum& state) {
-                state.next_neg = true;
-            }
-        };
-
-        template<typename x> struct sum<expr_sum_val<x>> {
-            template<typename Input>
-            static void apply(const Input& in, state::sum& state) {
-                state.push_back();
-            }
-        };
 
 
         template<typename Rule>
@@ -684,7 +654,8 @@ namespace keyword {
 
 
     template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::expression, action, pegtl::tracer> {};
-    template<typename x> struct control::normal<expr_sum_apply<x>> : pegtl::change_state_and_action<expr_sum_apply<x>, state::sum, actions::sum, pegtl::normal> {};
+    template<> struct control::normal<expr_sum_plus_apply> : pegtl::change_state_and_action<expr_sum_plus_apply, state::binary_expression<ast::plus>, actions::binary_expression, pegtl::normal> {};
+    template<> struct control::normal<expr_sum_minus_apply> : pegtl::change_state_and_action<expr_sum_minus_apply, state::binary_expression<ast::minus>, actions::binary_expression, pegtl::normal> {};
     template<> struct control::normal<expr_product_apply> : pegtl::change_state_and_action<expr_product_apply, state::product, actions::product, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
