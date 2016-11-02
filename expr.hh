@@ -78,6 +78,12 @@ namespace ast {
         bool data;
     };
 
+    struct ellipsis : public base {
+        explicit ellipsis() : base() {};
+        virtual void stream(std::ostream& o) const override { o << "..."; }
+        virtual bool operator ==(const base* o) const override { return dynamic_cast<const ellipsis*>(o); }
+    };
+
     template<char op>
     struct unary_expression : public base {
         explicit unary_expression(std::shared_ptr<base> value) : base(), value(value) {}
@@ -133,6 +139,18 @@ namespace ast {
     struct binds : public base {
         explicit binds(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) {};
         virtual void stream(std::ostream& o) const override { for (const auto& i : data) o << i << "; "; }
+        const std::vector<std::shared_ptr<ast::base>> data;
+    };
+
+    struct formal : public binary_expression<'?'> {
+        using binary_expression<'?'>::binary_expression;
+        virtual void stream(std::ostream& o) const override { o << lhs; if (rhs) o << " ? "  << rhs; }
+    };
+
+    struct formals : public base {
+        explicit formals(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) {}
+        virtual void stream(std::ostream& o) const override { o << "{"; auto i = data.cbegin(); if (i != data.cend()) o << " " << *i++; while (i != data.cend()) o << ", " << *i++; o << " }"; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const formals*>(o); return cast && data == cast->data; }
         const std::vector<std::shared_ptr<ast::base>> data;
     };
 
@@ -236,6 +254,23 @@ namespace state {
             assert(!value);
             assert(!in_result.value);
             in_result.value = std::make_shared<ast::binds>(std::move(data));
+        }
+    };
+
+    struct formals : base {
+        std::vector<std::shared_ptr<ast::base>> data;
+
+        void push_back() {
+            assert(value);
+            //assert(std::dynamic_pointer_cast<ast::formal>(value));
+            std::cout << "pushing " << value << std::endl;
+            data.push_back(std::move(value));
+        }
+
+        void success(base& in_result) {
+            assert(!value);
+            assert(!in_result.value);
+            in_result.value = std::make_shared<ast::formals>(std::move(data));
         }
     };
 
@@ -363,7 +398,8 @@ namespace keyword {
     template<typename CTX = void>
     struct expression;
 
-    struct formal : pegtl::seq<padr<name>, pegtl::opt<pegtl::if_must<padr<pegtl::one<'?'>>, expression<>>>> {};
+    struct formal_apply : pegtl::if_must<padr<pegtl::one<'?'>>, expression<>> {};
+    struct formal : pegtl::seq<padr<name>, pegtl::opt<formal_apply>> {};
     struct formals_nonempty : pegtl::seq<pegtl::list<formal, padr<pegtl::one<','>>>, pegtl::opt<padr<pegtl::one<','>>, pegtl::opt<keyword::key_ellipsis>>> {};
     struct formals : pegtl::opt<pegtl::sor<keyword::key_ellipsis, formals_nonempty>> {};
 
@@ -580,6 +616,22 @@ namespace keyword {
                 state.push_back();
             }
         };
+
+        template<typename Rules>
+        struct formals : action<Rules> {};
+
+        template<> struct formals<keyword::key_ellipsis> {
+            template<typename Input> static void apply(const Input& in, state::formals& state) {
+                state.value = std::make_shared<ast::ellipsis>();
+                state.push_back();
+            }
+        };
+
+        template<> struct formals<formal> {
+            template<typename Input> static void apply(const Input& in, state::formals& state) {
+                state.push_back();
+            }
+        };
     } // namespace actions
 
 
@@ -594,6 +646,8 @@ namespace keyword {
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<> struct control::normal<bind_eq_apply> : pegtl::change_state<bind_eq_apply, state::binary_expression<ast::binding_eq>, pegtl::tracer> {};
     template<> struct control::normal<bind_inherit_apply> : pegtl::change_state<bind_inherit_apply, state::binding_inherit, pegtl::tracer> {};
+    template<> struct control::normal<formal_apply> : pegtl::change_state_and_action<formal_apply, state::binary_expression<ast::formal>, action, pegtl::tracer> {};
+    template<> struct control::normal<formals> : pegtl::change_state_and_action<formals, state::formals, actions::formals, pegtl::tracer> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::tracer> {};
     template<typename x> struct control::normal<assert_apply<x>> : pegtl::change_state<assert_apply<x>, state::binary_expression<ast::assertion>, pegtl::normal> {};
     template<typename x> struct control::normal<with_apply<x>> : pegtl::change_state<with_apply<x>, state::binary_expression<ast::with>, pegtl::normal> {};

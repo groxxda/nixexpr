@@ -92,8 +92,10 @@ void check(S&& str) {
 
 std::shared_ptr<nix::ast::base> boolean(bool v) { return std::make_shared<nix::ast::boolean>(v); }
 std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<nix::ast::string>(v); }
-std::shared_ptr<nix::ast::base> number(long long v) { return std::make_shared<nix::ast::number>(v); }
+std::shared_ptr<nix::ast::number> number(unsigned long long v) { return std::make_shared<nix::ast::number>(v); }
+std::shared_ptr<nix::ast::number> operator "" _n(unsigned long long v) { return number(v); }
 std::shared_ptr<nix::ast::name> name(std::string v) { return std::make_shared<nix::ast::name>(v); }
+std::shared_ptr<nix::ast::name> operator "" _n(const char* v, size_t len) { return name(std::string(v, len)); }
 std::shared_ptr<nix::ast::base> not_(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::not_>(v); }
 std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::negate>(v); }
 std::shared_ptr<nix::ast::base> add(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::add>(lhs, rhs); }
@@ -213,7 +215,17 @@ TEST_CASE("table merge") {
 }
 
 TEST_CASE("function") {
-    CHECK_AST("a: 1", function(name("a"), number(1)));
+    CHECK_AST("a: 1", function("a"_n, number(1)));
+    CHECK_AST("a: b: 1", function("a"_n, function("b"_n, number(1))));
+}
+
+TEST_CASE("parameter list") {
+    check("{ }: 1"s);
+    check("{ a }: 1"s);
+    check("{ a, b }: 1"s);
+    check("{ ... }: 1"s);
+    check("{ a, ... }: 1"s);
+    check("{ a, b, ... }: 1"s);
 }
 
 
@@ -252,20 +264,7 @@ TEST_CASE("with") {
     CHECK_AST("with true; a", with(t, a));
 }
 
-//TEST_CASE("parameter") {
-//    CHECK(parse("a: 1"));
-//    CHECK(parse("a: b: 1"));
-//}
-//
-//TEST_CASE("parameter list") {
-//    CHECK(parse("{ }: 1"));
-//    CHECK(parse("{ a }: 1"));
-//    CHECK(parse("{ a, b }: 1"));
-//    CHECK(parse("{ ... }: 1"));
-//    CHECK(parse("{ a, ... }: 1"));
-//    CHECK(parse("{ a, b, ... }: 1"));
-//}
-//
+
 //TEST_CASE("assert") {
 //    CHECK(parse("assert true; 1"));
 //    CHECK(parse("assert 1; 1"));
