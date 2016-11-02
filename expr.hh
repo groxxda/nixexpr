@@ -88,12 +88,6 @@ namespace ast {
         std::shared_ptr<base> data;
     };
 
-    struct inverse : public base {
-        explicit inverse(std::shared_ptr<base> in_data) : base(), data(in_data) {};
-        virtual void stream(std::ostream& o) const override { o << "(1/" << data << ")"; }
-        std::shared_ptr<base> data;
-    };
-
     template<char op>
     struct binary_expression : public base {
         explicit binary_expression(std::shared_ptr<base> lhs, std::shared_ptr<base> rhs) : base(), lhs(lhs), rhs(rhs) {}
@@ -107,17 +101,9 @@ namespace ast {
 
     struct minus : public binary_expression<'-'> { using binary_expression<'-'>::binary_expression; };
 
-    struct product : public base {
-        explicit product() : base() {}
-        virtual void stream(std::ostream& o) const override {
-            o << "(";
-            auto iter = data.cbegin();
-            o << *iter;
-            while (++iter != data.cend()) o << "*" << *iter;
-            o << ")";
-        }
-        std::vector<std::shared_ptr<base>> data;
-    };
+    struct mul : public binary_expression<'*'> { using binary_expression<'*'>::binary_expression; };
+
+    struct div : public binary_expression<'/'> { using binary_expression<'/'>::binary_expression; };
 
     struct binds : virtual public base {
         explicit binds(bool recursive) : base(), recursive(recursive) {};
@@ -216,29 +202,6 @@ namespace state {
         }
     };
 
-    struct product : base {
-        std::shared_ptr<ast::product> product = std::make_shared<ast::product>();
-        bool next_inverse = false;
-        void push_back() {
-            assert(value);
-            if (next_inverse) {
-//                auto is_inverse = std::dynamic_pointer_cast<ast::inverse>(value);
-//                if (is_inverse)
-//                    value = std::move(is_inverse->data);
-//                else
-                    value = std::make_shared<ast::inverse>(std::move(value));
-                next_inverse = false;
-            }
-            product->data.push_back(std::move(value));
-            value.reset();
-        }
-        void success(base& in_result) {
-            assert(in_result.value);
-            assert(!value);
-            product->data.insert(product->data.begin(), std::move(in_result.value));
-            in_result.value = product;
-        }
-    };
 
     struct binds : base {
         std::vector<std::pair<std::shared_ptr<ast::name>, std::shared_ptr<ast::base>>> data;
@@ -461,20 +424,20 @@ namespace keyword {
     struct expr_arrayconcat : right_assoc<expr_attrtest, padr<pegtl::two<'+'>>, expr_apply<array>> {};
     template<> struct expr_arrayconcat<array> : right_assoc<expr_apply<array>, padr<pegtl::two<'+'>>> {};
 
-    struct operators_product_mul : padr<pegtl::one<'*'>> {};
-    struct operators_product_div : op_one<'/', '/'> {};
-    struct operators_product : pegtl::sor<operators_product_mul, operators_product_div> {};
-    struct expr_product_val : expr_negate<number>{};
-    struct expr_product_apply : pegtl::plus<pegtl::if_must<operators_product, expr_product_val>> {};
-    template<typename CTX>
-    struct expr_product : pegtl::seq<expr_arrayconcat<CTX>, pegtl::opt<expr_product_apply>> {};
-    //template<> struct expr_product<number> : left_assoc<expr_negate<number>, operators_product> {};
 
+    struct operators_product_div : op_one<'/', '/'> {};
+    struct expr_product_div_apply : pegtl::if_must<operators_product_div, expr_negate<number>> {};
+    struct expr_product_div : pegtl::seq<expr_arrayconcat<void>, pegtl::star<expr_product_div_apply>> {};
+
+
+    struct operators_product_mul : padr<pegtl::one<'*'>> {};
+    struct expr_product_mul_apply : pegtl::if_must<operators_product_mul, expr_product_div> {};
+    struct expr_product_mul : pegtl::seq<expr_product_div, pegtl::star<expr_product_mul_apply>> {};
 
 
     struct operators_sum_minus : op_one<'-', '>'> {};
-    struct expr_sum_minus_apply : pegtl::if_must<operators_sum_minus, expr_product<void>> {};
-    struct expr_sum_minus : pegtl::seq<expr_product<void>, pegtl::star<expr_sum_minus_apply>> {};
+    struct expr_sum_minus_apply : pegtl::if_must<operators_sum_minus, expr_product_mul> {};
+    struct expr_sum_minus : pegtl::seq<expr_product_mul, pegtl::star<expr_sum_minus_apply>> {};
 
 
     struct operators_sum_plus : padr<pegtl::one<'+'>> {};
@@ -632,31 +595,14 @@ namespace keyword {
         template<typename Rule>
         struct binary_expression : action<Rule> {};
 
-
-
-        template<typename Rule>
-        struct product : action<Rule> {};
-
-        template<> struct product<operators_product_div> {
-            template<typename Input>
-            static void apply(const Input& in, state::product& state) {
-                state.next_inverse = true;
-            }
-        };
-
-        template<> struct product<expr_product_val> {
-            template<typename Input>
-            static void apply(const Input& in, state::product& state) {
-                state.push_back();
-            }
-        };
     } // namespace actions
 
 
     template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::expression, action, pegtl::tracer> {};
     template<> struct control::normal<expr_sum_plus_apply> : pegtl::change_state_and_action<expr_sum_plus_apply, state::binary_expression<ast::plus>, actions::binary_expression, pegtl::normal> {};
     template<> struct control::normal<expr_sum_minus_apply> : pegtl::change_state_and_action<expr_sum_minus_apply, state::binary_expression<ast::minus>, actions::binary_expression, pegtl::normal> {};
-    template<> struct control::normal<expr_product_apply> : pegtl::change_state_and_action<expr_product_apply, state::product, actions::product, pegtl::normal> {};
+    template<> struct control::normal<expr_product_mul_apply> : pegtl::change_state_and_action<expr_product_mul_apply, state::binary_expression<ast::mul>, actions::binary_expression, pegtl::normal> {};
+    template<> struct control::normal<expr_product_div_apply> : pegtl::change_state_and_action<expr_product_div_apply, state::binary_expression<ast::div>, actions::binary_expression, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
 

@@ -96,6 +96,8 @@ std::shared_ptr<nix::ast::base> number(long long v) { return std::make_shared<ni
 std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::negate>(v); }
 std::shared_ptr<nix::ast::base> plus(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::plus>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> minus(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::minus>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> mul(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::mul>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::div>(lhs, rhs); }
 
 
 
@@ -166,9 +168,9 @@ TEST_CASE("arithmetic product") {
     check("23 * 42", "(23*42)"s);
     check("-23 * 42", "((-23)*42)"s);
     check("23 * -42", "(23*(-42))"s);
-    check("1 * 2 * 3", "(1*2*3)"s);
-    check("1 * -2 * 3", "(1*(-2)*3)"s);
-    check("1 / -2",  "(1*(1/(-2)))"s);
+    CHECK_AST("1 * 2 * 3", mul(mul(number(1), number(2)), number(3)));
+    CHECK_AST("1 * -2 * 3", mul(mul(number(1), negate(number(2))), number(3)));
+    CHECK_AST("1 / -2",  div(number(1), negate(number(2))));
 }
 
 TEST_CASE("arithmetic mixed") {
