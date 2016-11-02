@@ -170,26 +170,26 @@ TEST_CASE("bla") {
 
 TEST_CASE("number") {
     check("1337", 1337);
-    CHECK_AST("-1337", negate(number(1337)));
+    CHECK_AST("-1337", negate(1337_n));
     check("--1337", 1337);
 }
 
 TEST_CASE("arithmetic sum") {
-    CHECK_AST("-23 + 42", add(negate(number(23)), number(42)));
+    CHECK_AST("-23 + 42", add(negate(23_n), 42_n));
     check("23 - 42", "(23-42)"s);
-    CHECK_AST("23 - -42", sub(number(23), negate(number(42))));
+    CHECK_AST("23 - -42", sub(23_n, negate(42_n)));
     check("1 + 2 + 3", "((1+2)+3)"s);
-    CHECK_AST("1 + 2 + 3", add(add(number(1), number(2)),number(3)));
+    CHECK_AST("1 + 2 + 3", add(add(1_n, 2_n), 3_n));
     check("1 - 2 - 3", "((1-2)-3)"s);
 }
 
 TEST_CASE("arithmetic product") {
     check("23 * 42", "(23*42)"s);
-    CHECK_AST("-23 * 42", mul(negate(number(23)), number(42)));
-    CHECK_AST("23 * -42", mul(number(23), negate(number(42))));
-    CHECK_AST("1 * 2 * 3", mul(mul(number(1), number(2)), number(3)));
-    CHECK_AST("1 * -2 * 3", mul(mul(number(1), negate(number(2))), number(3)));
-    CHECK_AST("1 / -2",  div(number(1), negate(number(2))));
+    CHECK_AST("-23 * 42", mul(negate(23_n), 42_n));
+    CHECK_AST("23 * -42", mul(23_n, negate(42_n)));
+    CHECK_AST("1 * 2 * 3", mul(mul(1_n, 2_n), 3_n));
+    CHECK_AST("1 * -2 * 3", mul(mul(1_n, negate(2_n)), 3_n));
+    CHECK_AST("1 / -2",  div(1_n, negate(2_n)));
 }
 
 TEST_CASE("arithmetic mixed") {
@@ -217,8 +217,8 @@ TEST_CASE("table merge") {
 }
 
 TEST_CASE("function") {
-    CHECK_AST("a: 1", function("a"_n, number(1)));
-    CHECK_AST("a: b: 1", function("a"_n, function("b"_n, number(1))));
+    CHECK_AST("a: 1", function("a"_n, 1_n));
+    CHECK_AST("a: b: 1", function("a"_n, function("b"_n, 1_n)));
 }
 
 TEST_CASE("parameter list") {
@@ -267,16 +267,6 @@ TEST_CASE("with") {
     CHECK_AST("with true; a", with(t, a));
 }
 
-
-//TEST_CASE("assert") {
-//    CHECK(parse("assert true; 1"));
-//    CHECK(parse("assert 1; 1"));
-//    CHECK(parse("assert true;assert false ; 1"));
-//}
-//
-//TEST_CASE("with") {
-//    CHECK(parse("with x; 1"));
-//}
 
 //
 //TEST_CASE("if then else") {
