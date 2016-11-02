@@ -92,10 +92,11 @@ void check(S&& str) {
 
 std::shared_ptr<nix::ast::base> boolean(bool v) { return std::make_shared<nix::ast::boolean>(v); }
 std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<nix::ast::string>(v); }
-std::shared_ptr<nix::ast::number> number(unsigned long long v) { return std::make_shared<nix::ast::number>(v); }
-std::shared_ptr<nix::ast::number> operator "" _n(unsigned long long v) { return number(v); }
-std::shared_ptr<nix::ast::name> name(std::string v) { return std::make_shared<nix::ast::name>(v); }
-std::shared_ptr<nix::ast::name> operator "" _n(const char* v, size_t len) { return name(std::string(v, len)); }
+std::shared_ptr<nix::ast::base> operator "" _s(const char* v, size_t len) { return string(std::string(v, len)); }
+std::shared_ptr<nix::ast::base> number(unsigned long long v) { return std::make_shared<nix::ast::number>(v); }
+std::shared_ptr<nix::ast::base> operator "" _n(unsigned long long v) { return number(v); }
+std::shared_ptr<nix::ast::base> name(std::string v) { return std::make_shared<nix::ast::name>(v); }
+std::shared_ptr<nix::ast::base> operator "" _n(const char* v, size_t len) { return name(std::string(v, len)); }
 std::shared_ptr<nix::ast::base> not_(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::not_>(v); }
 std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::negate>(v); }
 std::shared_ptr<nix::ast::base> add(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::add>(lhs, rhs); }
@@ -107,7 +108,8 @@ std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs, std::s
 std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::impl>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> assertion(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::assertion>(what, expr); }
 std::shared_ptr<nix::ast::base> with(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::with>(what, expr); }
-std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::name> arg, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::function>(arg, expr); }
+std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::base> arg, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::function>(arg, expr); }
+std::shared_ptr<nix::ast::base> array(std::initializer_list<std::shared_ptr<nix::ast::base>> values) { return std::make_shared<nix::ast::array>(std::vector<std::shared_ptr<nix::ast::base>>(values)); }
 
 
 
@@ -235,6 +237,7 @@ TEST_CASE("array") {
     check("[ 1 ]"s);
     check("[ 1 \"b\" ]"s);
     check("[ 1 \"b\" c ]"s);
+    CHECK_AST("[ 1 \"b\" c ]", array({1_n, "b"_s, "c"_n}));
 }
 
 TEST_CASE("array merge") {

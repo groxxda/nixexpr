@@ -159,17 +159,14 @@ namespace ast {
         virtual void stream(std::ostream& o) const override { if (recursive) o << "rec "; o << "{ " << binds << "}"; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const table*>(o); return cast && recursive == cast->recursive && binds == cast->binds; }
         const std::shared_ptr<ast::base> binds;
-        bool recursive;
+        const bool recursive;
     };
 
     struct array : public base {
-        explicit array() : base(), data() { };
-        virtual void stream(std::ostream& o) const override {
-            o << "[ ";
-            for (const auto& i : data) o << *i << " ";
-            o << "]";
-        }
-        std::vector<std::shared_ptr<ast::base>> data;
+        explicit array(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) { };
+        virtual void stream(std::ostream& o) const override { o << "[ "; for (const auto& i : data) o << *i << " "; o << "]"; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const array*>(o); return cast && data == cast->data; }
+        const std::vector<std::shared_ptr<ast::base>> data;
     };
 
     struct let : public binary_expression<'l', 'e', 't'> {
@@ -275,17 +272,17 @@ namespace state {
     };
 
     struct array : base {
-        std::shared_ptr<ast::array> data = std::make_shared<ast::array>();
+        std::vector<std::shared_ptr<ast::base>> data;
 
         void push_back() {
             assert(value);
-            data->data.push_back(std::move(value));
+            data.push_back(std::move(value));
         };
 
         void success(base& in_result) {
             assert(!in_result.value);
             assert(!value);
-            in_result.value = std::move(data);
+            in_result.value = std::make_shared<ast::array>(std::move(data));
         }
     };
 } // namespace state
