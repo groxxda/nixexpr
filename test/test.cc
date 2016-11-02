@@ -233,10 +233,10 @@ TEST_CASE("let in") {
     check("let in 1"s);
     check("let x = 1; in 1"s);
     check("let x = 1; y = 2; in 1"s);
-    check("let inherit x; in 1"s, "let x = x; in 1"s);
-    check("let inherit(x) y; in 1"s, "let y = x.y; in 1"s);
-    check("let inherit (x) y z; in 1"s, "let y = x.y; z = x.z; in 1"s);
-    check("let inherit ({a=1;}) a b; in 1"s, "let a = { a = 1; }.a; b = { a = 1; }.b; in 1"s);
+    check("let inherit x; in 1"s);
+    check("let inherit (x) y; in 1"s);
+    check("let inherit (x) y z; in 1"s);
+    check("let inherit ({ a=1; }) a b; in 1"s);
 }
 
 TEST_CASE("assert") {

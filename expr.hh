@@ -113,25 +113,38 @@ namespace ast {
 
     struct impl : public binary_expression<'-', '>'> { using binary_expression<'-', '>'>::binary_expression; };
 
-
-    struct binds : virtual public base {
-        explicit binds(bool recursive) : base(), recursive(recursive) {};
-        virtual void stream(std::ostream& o) const override {
-            for (auto iter = data.cbegin(); iter != data.cend(); ++iter)
-                o << *(iter->first) << " = " << iter->second << "; ";
-        }
-        std::vector<std::pair<std::shared_ptr<ast::name>, std::shared_ptr<ast::base>>> data;
-        bool recursive;
+    struct binding_eq : public binary_expression<'='> {
+        using binary_expression<'='>::binary_expression;
+        virtual void stream(std::ostream& o) const override { o << lhs << " = " << rhs; }
     };
 
-    struct table : public binds {
-        explicit table(bool recursive) : binds(recursive) {}
+    struct binding_inherit : public base {
+        explicit binding_inherit(const std::shared_ptr<ast::base> from, const std::vector<std::shared_ptr<ast::base>> attrs) : base(), from(from), attrs(attrs) {};
+        virtual void stream(std::ostream& o) const override {
+            o << "inherit";
+            if (from) { o << " (" << from << ")"; }
+            for (const auto& i : attrs) o << " " << *i;
+        }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const binding_inherit*>(o); return cast && from == cast->from && attrs == cast->attrs; }
+        const std::shared_ptr<ast::base> from;
+        const std::vector<std::shared_ptr<ast::base>> attrs;
+    };
+
+    struct binds : virtual public base {
+        explicit binds(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) {};
+        virtual void stream(std::ostream& o) const override { for (const auto& i : data) o << i << "; "; }
+        const std::vector<std::shared_ptr<ast::base>> data;
+    };
+
+    struct table : public base {
+        explicit table(bool recursive) : /*binds(),*/ recursive(recursive) {}
         virtual void stream(std::ostream& o) const override {
             if (recursive) o << "rec ";
             o << "{ ";
-            binds::stream(o);
+//            binds::stream(o);
             o << "}";
         }
+        bool recursive;
     };
 
     struct array : public base {
@@ -150,9 +163,9 @@ namespace ast {
         const std::shared_ptr<ast::base> expr;
     };
 
-    struct let : public binds, public statement {
-        explicit let(std::shared_ptr<ast::base> expr) : binds(true), statement(expr) {}
-        virtual void stream(std::ostream& o) const override { o << "let "; binds::stream(o); o << "in "; }
+    struct let : public binary_expression<'l', 'e', 't'> {
+        using binary_expression<'l', 'e', 't'>::binary_expression;
+        virtual void stream(std::ostream& o) const override { o << "let " << lhs << "in " << rhs; }
     };
 
     struct function : public statement {
@@ -197,9 +210,6 @@ namespace state {
 
     template<typename T>
     struct binary_expression : base {
-        void start(base& in_result) {
-            std::cout << "starting binary_expression " << this << std::endl;
-        }
         void success(base& in_result) {
             assert(in_result.value);
             assert(value);
@@ -207,34 +217,40 @@ namespace state {
         }
     };
 
-
-    struct binds : base {
-        std::vector<std::pair<std::shared_ptr<ast::name>, std::shared_ptr<ast::base>>> data;
-        std::shared_ptr<ast::name> key;
+    struct binding_inherit : base {
         std::shared_ptr<ast::base> from;
+        std::vector<std::shared_ptr<ast::base>> attrs;
+
+        void set_from() {
+            assert(value);
+            from = std::move(value);
+        }
 
         void push_back() {
-            assert(key);
             assert(value);
-            if (from) {
-// XXX: ^_^
-                std::stringstream t;
-                t << from;
-                t << ".";
-                t << value;
-                value = std::make_shared<ast::name>(t.str());
-            }
-            data.emplace_back(std::move(key), std::move(value));
-            key.reset();
-            value.reset();
+            attrs.push_back(std::move(value));
+        }
+
+        void success(base& in_result) {
+            assert(!in_result.value);
+            assert(!value);
+            in_result.value = std::make_shared<ast::binding_inherit>(from, attrs);
+        }
+    };
+
+    struct binds : base {
+        std::vector<std::shared_ptr<ast::base>> data;
+
+        void push_back() {
+            assert(value);
+            assert(std::dynamic_pointer_cast<ast::binding_eq>(value) || std::dynamic_pointer_cast<ast::binding_inherit>(value));
+            data.push_back(std::move(value));
         }
 
         void success(base& in_result) {
             assert(!value);
-            assert(in_result.value);
-            auto is_table = std::dynamic_pointer_cast<ast::binds>(in_result.value);
-            assert(is_table);
-            is_table->data = std::move(data);
+            assert(!in_result.value);
+            in_result.value = std::make_shared<ast::binds>(std::move(data));
         }
     };
 
@@ -311,7 +327,7 @@ namespace keyword {
     struct str_import  : pegtl::string<'i', 'm', 'p', 'o', 'r', 't'>      {};
 
     // we have to allow legacy attrname or... cran has an attribute named import
-    struct str_forbidden:pegtl::sor<str_if, str_then, str_else, str_assert, str_with, str_let, str_in, str_rec, str_inherit, str_true, str_false> {};
+    struct str_forbidden:pegtl::sor<str_if, str_then, str_else, str_assert, str_with, str_let, str_rec, str_inherit, str_in, str_true, str_false> {};
     struct str_any     : pegtl::sor<str_forbidden, str_or> {};
 
     template<typename Key>
@@ -381,13 +397,15 @@ namespace keyword {
     struct table_end : pegtl::one<'}'> {};
     struct table : pegtl::if_must<table_begin, binds<table_end>> {};
 
-    struct bind_eq_attrpath : attrpath {};
+    //struct bind_eq_attrpath : attrpath {};
     struct bind_eq_operator : padr<pegtl::one<'='>> {};
-    struct bind_eq : pegtl::seq<padr<attr>, pegtl::if_must<bind_eq_operator, expression<>>> {};
+    struct bind_eq_apply : pegtl::seq<expression<>, padr<pegtl::one<';'>>> {};
+    struct bind_eq : pegtl::seq<padr<attr>, pegtl::if_must<bind_eq_operator, bind_eq_apply>> {};
     struct bind_inherit_attrname : attr {};
     struct bind_inherit_from : pegtl::if_must<padr<pegtl::one<'('>>, expression<table>, padr<pegtl::one<')'>>> {};
-    struct bind_inherit : pegtl::if_must<keyword::key_inherit, pegtl::opt<bind_inherit_from>, pegtl::star<padr<bind_inherit_attrname>>> {};
-    struct bind : pegtl::seq<pegtl::sor<bind_eq, bind_inherit>, padr<pegtl::one<';'>>> {};
+    struct bind_inherit_apply : pegtl::seq<pegtl::opt<bind_inherit_from>, pegtl::star<padr<bind_inherit_attrname>>, padr<pegtl::one<';'>>> {};
+    struct bind_inherit : pegtl::if_must<keyword::key_inherit, bind_inherit_apply> {};
+    struct bind : pegtl::sor<bind_eq, bind_inherit> {};
 
 
 
@@ -505,8 +523,12 @@ namespace keyword {
     struct with_apply : expression<CTX> {};
     template<typename CTX>
     struct with : pegtl::if_must<keyword::key_with, expression<>, padr<pegtl::one<';'>>, with_apply<CTX>> {};
+
     template<typename CTX>
-    struct let : pegtl::if_must<keyword::key_let, binds<keyword::key_in>, expression<CTX>> {};
+    struct let_apply : expression<CTX> {};
+    template<typename CTX>
+    struct let : pegtl::if_must<keyword::key_let, binds<keyword::key_in>, let_apply<CTX>> {};
+
     template<typename CTX>
     struct function : pegtl::if_must<arguments, expression<CTX>> {};
 
@@ -537,54 +559,21 @@ namespace keyword {
         template<typename Rule>
         struct binds : action<Rule> {};
 
-        template<> struct binds<bind_eq_operator> {
-            template<typename Input> static void apply(const Input& in, state::binds& state) {
-                assert(!state.key);
-                assert(state.value);
-                if (auto is_name = std::dynamic_pointer_cast<ast::name>(state.value))
-                    state.key = std::move(is_name);
-
-                assert(state.key);
-                state.value.reset();
-            }
-        };
-
         template<> struct binds<bind_inherit_attrname> {
-            template<typename Input> static void apply(const Input& in, state::binds& state) {
-                assert(!state.key);
-                assert(state.value);
-                if (auto is_name = std::dynamic_pointer_cast<ast::name>(state.value))
-                    state.key = std::move(is_name);
-
-                assert(state.key);
+            template<typename Input> static void apply(const Input& in, state::binding_inherit& state) {
                 state.push_back();
             }
         };
 
         template<> struct binds<bind_inherit_from> {
-            template<typename Input> static void apply(const Input& in, state::binds& state) {
-                assert(state.value);
-                state.from = std::move(state.value);
-
-                assert(state.from);
+            template<typename Input> static void apply(const Input& in, state::binding_inherit& state) {
+                state.set_from();
             }
         };
 
-        template<> struct binds<keyword::key_inherit> {
-            template<typename Input> static void apply(const Input& in, state::binds& state) {
-                state.value.reset();
-            }
-        };
-
-        template<> struct binds<bind_eq> {
+        template<> struct binds<bind> {
             template<typename Input> static void apply(const Input& in, state::binds& state) {
                 state.push_back();
-            }
-        };
-
-        template<> struct binds<bind_inherit> {
-            template<typename Input> static void apply(const Input& in, state::binds& state) {
-                state.from.reset();
             }
         };
 
@@ -597,8 +586,6 @@ namespace keyword {
                 state.push_back();
             }
         };
-
-
     } // namespace actions
 
 
@@ -611,9 +598,12 @@ namespace keyword {
     template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
     template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
-    template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
+    template<> struct control::normal<bind_eq_apply> : pegtl::change_state<bind_eq_apply, state::binary_expression<ast::binding_eq>, pegtl::tracer> {};
+    template<> struct control::normal<bind_inherit_apply> : pegtl::change_state<bind_inherit_apply, state::binding_inherit, pegtl::tracer> {};
+    template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::tracer> {};
     template<typename x> struct control::normal<assert_apply<x>> : pegtl::change_state<assert_apply<x>, state::binary_expression<ast::assertion>, pegtl::normal> {};
     template<typename x> struct control::normal<with_apply<x>> : pegtl::change_state<with_apply<x>, state::binary_expression<ast::with>, pegtl::normal> {};
+    template<typename x> struct control::normal<let_apply<x>> : pegtl::change_state<let_apply<x>, state::binary_expression<ast::let> , pegtl::tracer> {};
 
 
     template<typename Rule>
@@ -693,13 +683,6 @@ namespace keyword {
             state.value = std::make_shared<ast::table>(true);
         }
     };
-
-//    template<> struct action<keyword::key_let> {
-//        template<typename Input>
-//        static void apply(const Input& in, state::base& state) {
-//            state.value = std::make_shared<ast::let>();
-//        }
-//    };
 
     template<> struct action<table_begin_nonrecursive> {
         template<typename Input>
