@@ -201,11 +201,11 @@ TEST_CASE("table") {
     check("rec { a = 1; }"s);
     check("{ a = 1; b = \"c\"; }"s);
     check("{ a = 1; b = \"c\"; c = foobar; }"s);
-    check("{ inherit a; }"s, "{ a = a; }"s);
-    check("{ inherit a b; }"s, "{ a = a; b = b; }"s);
-    check("{ inherit (a) b; }"s, "{ b = a.b; }"s);
-    check("{ inherit (a) b c; }"s, "{ b = a.b; c = a.c; }"s);
-    check("{ inherit (a) b; inherit c; inherit (d) e; }"s, "{ b = a.b; c = c; e = d.e; }"s);
+    check("{ inherit a; }"s);
+    check("{ inherit a b; }"s);
+    check("{ inherit (a) b; }"s);
+    check("{ inherit (a) b c; }"s);
+    check("{ inherit (a) b; inherit c; inherit (d) e; }"s);
 }
 
 TEST_CASE("table merge") {
@@ -213,7 +213,7 @@ TEST_CASE("table merge") {
 }
 
 TEST_CASE("function") {
-    CHECK_AST("a: 1", function(name("a"), number(1)));
+    //CHECK_AST("a: 1", function(name("a"), number(1)));
 }
 
 
@@ -236,7 +236,7 @@ TEST_CASE("let in") {
     check("let inherit x; in 1"s);
     check("let inherit (x) y; in 1"s);
     check("let inherit (x) y z; in 1"s);
-    check("let inherit ({ a=1; }) a b; in 1"s);
+    check("let inherit ({ a = 1; }) b c; in 1"s);
 }
 
 TEST_CASE("assert") {

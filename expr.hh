@@ -130,20 +130,17 @@ namespace ast {
         const std::vector<std::shared_ptr<ast::base>> attrs;
     };
 
-    struct binds : virtual public base {
+    struct binds : public base {
         explicit binds(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) {};
         virtual void stream(std::ostream& o) const override { for (const auto& i : data) o << i << "; "; }
         const std::vector<std::shared_ptr<ast::base>> data;
     };
 
     struct table : public base {
-        explicit table(bool recursive) : /*binds(),*/ recursive(recursive) {}
-        virtual void stream(std::ostream& o) const override {
-            if (recursive) o << "rec ";
-            o << "{ ";
-//            binds::stream(o);
-            o << "}";
-        }
+        explicit table(const std::shared_ptr<ast::base> data, bool recursive) : binds(data), recursive(recursive) {}
+        virtual void stream(std::ostream& o) const override { if (recursive) o << "rec "; o << "{ " << binds << "}"; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const table*>(o); return cast && recursive == cast->recursive && binds == cast->binds; }
+        const std::shared_ptr<ast::base> binds;
         bool recursive;
     };
 
@@ -213,7 +210,7 @@ namespace state {
         void success(base& in_result) {
             assert(in_result.value);
             assert(value);
-            in_result.value = std::make_shared<T>(in_result.value, value);
+            in_result.value = std::make_shared<T>(std::move(in_result.value), std::move(value));
         }
     };
 
@@ -393,9 +390,10 @@ namespace keyword {
 
     struct table_begin_recursive : pegtl::seq<keyword::key_rec, padr<pegtl::one<'{'>>> {};
     struct table_begin_nonrecursive : padr<pegtl::one<'{'>> {};
-    struct table_begin : pegtl::sor<table_begin_recursive, table_begin_nonrecursive> {};
     struct table_end : pegtl::one<'}'> {};
-    struct table : pegtl::if_must<table_begin, binds<table_end>> {};
+    template<typename table_begin>
+    struct table_apply : pegtl::if_must<table_begin, binds<table_end>> {};
+    struct table : pegtl::sor<table_apply<table_begin_recursive>, table_apply<table_begin_nonrecursive>> {};
 
     //struct bind_eq_attrpath : attrpath {};
     struct bind_eq_operator : padr<pegtl::one<'='>> {};
@@ -605,6 +603,8 @@ namespace keyword {
     template<typename x> struct control::normal<with_apply<x>> : pegtl::change_state<with_apply<x>, state::binary_expression<ast::with>, pegtl::normal> {};
     template<typename x> struct control::normal<let_apply<x>> : pegtl::change_state<let_apply<x>, state::binary_expression<ast::let> , pegtl::tracer> {};
 
+    template<> struct control::normal<arguments> : pegtl::change_state<arguments, state::base, pegtl::tracer> {};
+
 
     template<typename Rule>
     struct errors : pegtl::normal<Rule> {
@@ -677,17 +677,17 @@ namespace keyword {
         }
     };
 
-    template<> struct action<table_begin_recursive> {
-        template<typename Input>
-        static void apply(const Input& in, state::base& state) {
-            state.value = std::make_shared<ast::table>(true);
+    template<> struct action<table_apply<table_begin_nonrecursive>> {
+        template<typename Input> static void apply(const Input& in, state::base& state) {
+            assert(state.value);
+            state.value = std::make_shared<ast::table>(std::move(state.value), false);
         }
     };
 
-    template<> struct action<table_begin_nonrecursive> {
-        template<typename Input>
-        static void apply(const Input& in, state::base& state) {
-            state.value = std::make_shared<ast::table>(false);
+    template<> struct action<table_apply<table_begin_recursive>> {
+        template<typename Input> static void apply(const Input& in, state::base& state) {
+            assert(state.value);
+            state.value = std::make_shared<ast::table>(std::move(state.value), true);
         }
     };
 
