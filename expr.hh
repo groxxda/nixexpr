@@ -154,12 +154,6 @@ namespace ast {
         std::vector<std::shared_ptr<ast::base>> data;
     };
 
-    struct statement : virtual public base {
-        explicit statement(const std::shared_ptr<ast::base> expr) : base(), expr(expr) {}
-        virtual bool operator==(const statement* o) const { return expr == o->expr; }
-        const std::shared_ptr<ast::base> expr;
-    };
-
     struct let : public binary_expression<'l', 'e', 't'> {
         using binary_expression<'l', 'e', 't'>::binary_expression;
         virtual void stream(std::ostream& o) const override { o << "let " << lhs << "in " << rhs; }
@@ -170,18 +164,14 @@ namespace ast {
         virtual void stream(std::ostream& o) const override { o << lhs << ": " << rhs; }
     };
 
-    struct assertion : public statement {
-        explicit assertion(const std::shared_ptr<ast::base> what, const std::shared_ptr<ast::base> expr) : statement(expr), what(what) {}
-        virtual void stream(std::ostream& o) const override { o << "assert " << what << "; " << expr; }
-        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const assertion*>(o); return cast && statement::operator==(cast) && what == cast->what; }
-        const std::shared_ptr<ast::base> what;
+    struct assertion : public binary_expression<'a', 's', 's', 'e', 'r', 't'> {
+        using binary_expression<'a', 's', 's', 'e', 'r', 't'>::binary_expression;
+        virtual void stream(std::ostream& o) const override { o << "assert " << lhs << "; " << rhs; }
     };
 
-    struct with : public statement {
-        explicit with(const std::shared_ptr<ast::base> what, const std::shared_ptr<ast::base> expr) : statement(expr), what(what) {}
-        virtual void stream(std::ostream& o) const override { o << "with " << what << "; " << expr; }
-        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const with*>(o); return cast && statement::operator==(cast) && what == cast->what; }
-        const std::shared_ptr<ast::base> what;
+    struct with : public binary_expression<'w', 'i', 't', 'h'> {
+        using binary_expression<'w', 'i', 't', 'h'>::binary_expression;
+        virtual void stream(std::ostream& o) const override { o << "with " << lhs << "; " << rhs; }
     };
 
 
