@@ -110,7 +110,7 @@ std::shared_ptr<nix::ast::base> assertion(std::shared_ptr<nix::ast::base> what, 
 std::shared_ptr<nix::ast::base> with(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::with>(what, expr); }
 std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::base> arg, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::function>(arg, expr); }
 std::shared_ptr<nix::ast::base> array(std::initializer_list<std::shared_ptr<nix::ast::base>> values) { return std::make_shared<nix::ast::array>(std::vector<std::shared_ptr<nix::ast::base>>(values)); }
-
+std::shared_ptr<nix::ast::base> if_then_else(std::shared_ptr<nix::ast::base> test, std::shared_ptr<nix::ast::base> then_expr, std::shared_ptr<nix::ast::base> else_expr) { return std::make_shared<nix::ast::if_then_else>(test, then_expr, else_expr); }
 
 
 #if 0
@@ -267,13 +267,11 @@ TEST_CASE("with") {
     CHECK_AST("with true; a", with(t, a));
 }
 
+TEST_CASE("if then else") {
+    check("if true then \"yes\" else \"false\""s);
+    CHECK_AST("if true then \"yes\" else \"false\"", if_then_else(boolean(true), "yes"_s, "false"_s));
+}
 
-//
-//TEST_CASE("if then else") {
-//    CHECK(parse("if true then \"yes\" else \"false\""));
-//    CHECK(parse("if (1) then (\"yes\") else (\"false\")"));
-//}
-//
 //
 //TEST_CASE("complex") {
 //

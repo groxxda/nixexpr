@@ -189,7 +189,14 @@ namespace ast {
         virtual void stream(std::ostream& o) const override { o << "with " << lhs << "; " << rhs; }
     };
 
-
+    struct if_then_else : public base {
+        explicit if_then_else(const std::shared_ptr<ast::base> test, const std::shared_ptr<ast::base> then_expr, const std::shared_ptr<ast::base> else_expr) : base(), test(test), then_expr(then_expr), else_expr(else_expr) {}
+        virtual void stream(std::ostream& o) const override { o << "if " << test << " then " << then_expr << " else " << else_expr; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const if_then_else*>(o); return cast && test == cast->test && then_expr == cast->then_expr && else_expr == cast->else_expr; }
+        const std::shared_ptr<ast::base> test;
+        const std::shared_ptr<ast::base> then_expr;
+        const std::shared_ptr<ast::base> else_expr;
+    };
 } // namespace ast
 
 
@@ -214,6 +221,27 @@ namespace state {
             assert(in_result.value);
             assert(value);
             in_result.value = std::make_shared<T>(std::move(in_result.value), std::move(value));
+        }
+    };
+
+    struct if_then_else : base {
+        std::shared_ptr<ast::base> test;
+        std::shared_ptr<ast::base> then_expr;
+
+        void set_test() {
+            assert(value);
+            test = std::move(value);
+        }
+
+        void set_then() {
+            assert(value);
+            then_expr = std::move(value);
+        }
+
+        void success(base& in_result) {
+            assert(!in_result.value);
+            assert(value);
+            in_result.value = std::make_shared<ast::if_then_else>(std::move(test), std::move(then_expr), std::move(value));
         }
     };
 
@@ -530,7 +558,9 @@ namespace keyword {
 
 
     template<typename CTX>
-    struct expr_if : pegtl::if_must<keyword::key_if, expression<boolean>, keyword::key_then, expression<CTX>, keyword::key_else, expression<CTX>> {};
+    struct expr_if_apply : pegtl::seq<expression<boolean>, keyword::key_then, expression<CTX>, keyword::key_else, expression<CTX>> {};
+    template<typename CTX>
+    struct expr_if : pegtl::if_must<keyword::key_if, expr_if_apply<CTX>> {};
 
     // TODO: allow importing uri
     //struct expr_import : pegtl::if_must<keyword::key_import, padr<pegtl::sor<path, spath, string, name, expr_select>>, pegtl::opt<expr_applying<expr_applying_tail>>> {};
@@ -614,6 +644,7 @@ namespace keyword {
             }
         };
 
+
         template<typename Rules>
         struct formals : action<Rules> {};
 
@@ -627,6 +658,21 @@ namespace keyword {
         template<> struct formals<formal> {
             template<typename Input> static void apply(const Input& in, state::formals& state) {
                 state.push_back();
+            }
+        };
+
+        template<typename Rules>
+        struct if_then_else : action<Rules> {};
+
+        template<> struct if_then_else<keyword::key_then> {
+            template<typename Input> static void apply(const Input& in, state::if_then_else& state) {
+                state.set_test();
+            }
+        };
+
+        template<> struct if_then_else<keyword::key_else> {
+            template<typename Input> static void apply(const Input& in, state::if_then_else& state) {
+                state.set_then();
             }
         };
     } // namespace actions
@@ -650,6 +696,7 @@ namespace keyword {
     template<typename x> struct control::normal<with_apply<x>> : pegtl::change_state<with_apply<x>, state::binary_expression<ast::with>, pegtl::normal> {};
     template<typename x> struct control::normal<let_apply<x>> : pegtl::change_state<let_apply<x>, state::binary_expression<ast::let> , pegtl::tracer> {};
     template<typename x> struct control::normal<function_apply<x>> : pegtl::change_state<function_apply<x>, state::binary_expression<ast::function> , pegtl::tracer> {};
+    template<typename x> struct control::normal<expr_if_apply<x>> : pegtl::change_state_and_action<expr_if_apply<x>, state::if_then_else, actions::if_then_else, pegtl::tracer> {};
     template<typename x> struct control::normal<backtrack<x>> : pegtl::tracer<backtrack<x>> {};
 
 
