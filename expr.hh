@@ -104,6 +104,8 @@ namespace ast {
 
     struct or_ : public binary_expression<'|', '|'> { using binary_expression<'|', '|'>::binary_expression; };
 
+    struct and_ : public binary_expression<'&', '&'> { using binary_expression<'&', '&'>::binary_expression; };
+
     struct binds : virtual public base {
         explicit binds(bool recursive) : base(), recursive(recursive) {};
         virtual void stream(std::ostream& o) const override {
@@ -463,8 +465,12 @@ namespace keyword {
     template<typename CTX>
     struct expr_equality : non_assoc<expr_ordering<CTX>, operators_equality> {};
 
+
+    struct operator_and : padr<pegtl::two<'&'>> {};
+    struct expr_and_apply : pegtl::if_must<operator_and, expr_equality<boolean>> {};
     template<typename CTX>
-    struct expr_and : left_assoc<expr_equality<CTX>, padr<pegtl::two<'&'>>, expr_equality<boolean>> {};
+    struct expr_and : pegtl::seq<expr_equality<CTX>, pegtl::star<expr_and_apply>> {};
+
 
     struct operator_or : padr<pegtl::two<'|'>> {};
     struct expr_or_apply : pegtl::if_must<operator_or, expr_and<boolean>> {};
@@ -585,6 +591,7 @@ namespace keyword {
     template<> struct control::normal<expr_mul_apply> : pegtl::change_state<expr_mul_apply, state::binary_expression<ast::mul>, pegtl::normal> {};
     template<> struct control::normal<expr_div_apply> : pegtl::change_state<expr_div_apply, state::binary_expression<ast::div>, pegtl::normal> {};
     template<> struct control::normal<expr_or_apply> : pegtl::change_state<expr_or_apply, state::binary_expression<ast::or_>, pegtl::normal> {};
+    template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
 
