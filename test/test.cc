@@ -95,8 +95,8 @@ std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<
 std::shared_ptr<nix::ast::base> number(long long v) { return std::make_shared<nix::ast::number>(v); }
 std::shared_ptr<nix::ast::base> not_(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::not_>(v); }
 std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::negate>(v); }
-std::shared_ptr<nix::ast::base> plus(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::plus>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> minus(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::minus>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> add(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::add>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> sub(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::sub>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> mul(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::mul>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::div>(lhs, rhs); }
 
@@ -156,11 +156,11 @@ TEST_CASE("number") {
 }
 
 TEST_CASE("arithmetic sum") {
-    CHECK_AST("-23 + 42", plus(negate(number(23)), number(42)));
+    CHECK_AST("-23 + 42", add(negate(number(23)), number(42)));
     check("23 - 42", "(23-42)"s);
-    CHECK_AST("23 - -42", minus(number(23), negate(number(42))));
+    CHECK_AST("23 - -42", sub(number(23), negate(number(42))));
     check("1 + 2 + 3", "((1+2)+3)"s);
-    CHECK_AST("1 + 2 + 3", plus(plus(number(1), number(2)),number(3)));
+    CHECK_AST("1 + 2 + 3", add(add(number(1), number(2)),number(3)));
     check("1 - 2 - 3", "((1-2)-3)"s);
 }
 

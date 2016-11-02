@@ -94,9 +94,9 @@ namespace ast {
         std::shared_ptr<base> rhs;
     };
 
-    struct plus : public binary_expression<'+'> { using binary_expression<'+'>::binary_expression; };
+    struct add : public binary_expression<'+'> { using binary_expression<'+'>::binary_expression; };
 
-    struct minus : public binary_expression<'-'> { using binary_expression<'-'>::binary_expression; };
+    struct sub : public binary_expression<'-'> { using binary_expression<'-'>::binary_expression; };
 
     struct mul : public binary_expression<'*'> { using binary_expression<'*'>::binary_expression; };
 
@@ -422,30 +422,30 @@ namespace keyword {
     template<> struct expr_arrayconcat<array> : right_assoc<expr_apply<array>, padr<pegtl::two<'+'>>> {};
 
 
-    struct operators_product_div : op_one<'/', '/'> {};
-    struct expr_product_div_apply : pegtl::if_must<operators_product_div, expr_negate<number>> {};
-    struct expr_product_div : pegtl::seq<expr_arrayconcat<void>, pegtl::star<expr_product_div_apply>> {};
+    struct operator_div : op_one<'/', '/'> {};
+    struct expr_div_apply : pegtl::if_must<operator_div, expr_negate<number>> {};
+    struct expr_div : pegtl::seq<expr_arrayconcat<void>, pegtl::star<expr_div_apply>> {};
 
 
-    struct operators_product_mul : padr<pegtl::one<'*'>> {};
-    struct expr_product_mul_apply : pegtl::if_must<operators_product_mul, expr_product_div> {};
-    struct expr_product_mul : pegtl::seq<expr_product_div, pegtl::star<expr_product_mul_apply>> {};
+    struct operator_mul : padr<pegtl::one<'*'>> {};
+    struct expr_mul_apply : pegtl::if_must<operator_mul, expr_div> {};
+    struct expr_mul : pegtl::seq<expr_div, pegtl::star<expr_mul_apply>> {};
 
 
-    struct operators_sum_minus : op_one<'-', '>'> {};
-    struct expr_sum_minus_apply : pegtl::if_must<operators_sum_minus, expr_product_mul> {};
-    struct expr_sum_minus : pegtl::seq<expr_product_mul, pegtl::star<expr_sum_minus_apply>> {};
+    struct operator_sub : op_one<'-', '>'> {};
+    struct expr_sub_apply : pegtl::if_must<operator_sub, expr_mul> {};
+    struct expr_sub : pegtl::seq<expr_mul, pegtl::star<expr_sub_apply>> {};
 
 
-    struct operators_sum_plus : padr<pegtl::one<'+'>> {};
-    struct expr_sum_plus_apply : pegtl::if_must<operators_sum_plus, expr_sum_minus> {};
-    struct expr_sum : pegtl::seq<expr_sum_minus, pegtl::star<expr_sum_plus_apply>> {};
+    struct operator_add : padr<pegtl::one<'+'>> {};
+    struct expr_add_apply : pegtl::if_must<operator_add, expr_sub> {};
+    struct expr_add : pegtl::seq<expr_sub, pegtl::star<expr_add_apply>> {};
 
 
     struct operator_not : padr<pegtl::one<'!'>> {};
     struct operator_not_double : pegtl::rep<2, operator_not> {};
     struct expr_not_val : expr_attrtest {};
-    struct expr_not : pegtl::seq<pegtl::star<operator_not_double>, pegtl::if_then_else<operator_not, expr_not_val, expr_sum>> {};
+    struct expr_not : pegtl::seq<pegtl::star<operator_not_double>, pegtl::if_then_else<operator_not, expr_not_val, expr_add>> {};
 
     template<typename CTX>
     struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>, expr_apply<table>> {};
@@ -453,7 +453,7 @@ namespace keyword {
 
     struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>>> {};
     template<typename CTX>
-    struct expr_ordering : left_assoc<expr_setplus<CTX>, operators_ordering, expr_sum> {};
+    struct expr_ordering : left_assoc<expr_setplus<CTX>, operators_ordering, expr_add> {};
     //template<> struct expr_ordering<number> : left_assoc<expr_sum<number>, operators_ordering> {};
 
     struct operators_equality : padr<pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>>> {};
@@ -489,7 +489,7 @@ namespace keyword {
 
     template<> struct expression<void> : pegtl::seq<statement_list, pegtl::sor<expr_if<void>, expr_impl<void>>> {};
     template<> struct expression<boolean> : pegtl::seq<statement_list, pegtl::sor<expr_if<boolean>, expr_impl<boolean>>> {};
-    template<> struct expression<string> : pegtl::seq<statement_list, pegtl::sor<expr_if<string>, expr_sum>> {};
+    template<> struct expression<string> : pegtl::seq<statement_list, pegtl::sor<expr_if<string>, expr_add>> {};
     template<> struct expression<table> : pegtl::seq<statement_list, pegtl::sor<expr_if<table>, expr_setplus<table>>> {};
 
 
@@ -576,10 +576,10 @@ namespace keyword {
 
 
     template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::expression, action, pegtl::tracer> {};
-    template<> struct control::normal<expr_sum_plus_apply> : pegtl::change_state<expr_sum_plus_apply, state::binary_expression<ast::plus>, pegtl::normal> {};
-    template<> struct control::normal<expr_sum_minus_apply> : pegtl::change_state<expr_sum_minus_apply, state::binary_expression<ast::minus>, pegtl::normal> {};
-    template<> struct control::normal<expr_product_mul_apply> : pegtl::change_state<expr_product_mul_apply, state::binary_expression<ast::mul>, pegtl::normal> {};
-    template<> struct control::normal<expr_product_div_apply> : pegtl::change_state<expr_product_div_apply, state::binary_expression<ast::div>, pegtl::normal> {};
+    template<> struct control::normal<expr_add_apply> : pegtl::change_state<expr_add_apply, state::binary_expression<ast::add>, pegtl::normal> {};
+    template<> struct control::normal<expr_sub_apply> : pegtl::change_state<expr_sub_apply, state::binary_expression<ast::sub>, pegtl::normal> {};
+    template<> struct control::normal<expr_mul_apply> : pegtl::change_state<expr_mul_apply, state::binary_expression<ast::mul>, pegtl::normal> {};
+    template<> struct control::normal<expr_div_apply> : pegtl::change_state<expr_div_apply, state::binary_expression<ast::div>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
 
