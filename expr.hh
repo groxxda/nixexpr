@@ -508,14 +508,6 @@ namespace keyword {
     template<typename Rule>
     struct action : pegtl::nothing<Rule> {};
 
-//    template<> struct action<grammar> {
-//        template<typename Input> static void apply(const Input& in, state::expression& state) {
-//            auto is_expression = std::dynamic_pointer_cast<ast::expression>(state.value);
-//            assert(is_expression);
-//            state.value = std::move(is_expression);
-//        }
-//    };
-
 
     template<> struct action<expr_negate_val> {
         template<typename Input>
@@ -592,17 +584,14 @@ namespace keyword {
         };
 
 
-        template<typename Rule>
-        struct binary_expression : action<Rule> {};
-
     } // namespace actions
 
 
     template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::expression, action, pegtl::tracer> {};
-    template<> struct control::normal<expr_sum_plus_apply> : pegtl::change_state_and_action<expr_sum_plus_apply, state::binary_expression<ast::plus>, actions::binary_expression, pegtl::normal> {};
-    template<> struct control::normal<expr_sum_minus_apply> : pegtl::change_state_and_action<expr_sum_minus_apply, state::binary_expression<ast::minus>, actions::binary_expression, pegtl::normal> {};
-    template<> struct control::normal<expr_product_mul_apply> : pegtl::change_state_and_action<expr_product_mul_apply, state::binary_expression<ast::mul>, actions::binary_expression, pegtl::normal> {};
-    template<> struct control::normal<expr_product_div_apply> : pegtl::change_state_and_action<expr_product_div_apply, state::binary_expression<ast::div>, actions::binary_expression, pegtl::normal> {};
+    template<> struct control::normal<expr_sum_plus_apply> : pegtl::change_state<expr_sum_plus_apply, state::binary_expression<ast::plus>, pegtl::normal> {};
+    template<> struct control::normal<expr_sum_minus_apply> : pegtl::change_state<expr_sum_minus_apply, state::binary_expression<ast::minus>, pegtl::normal> {};
+    template<> struct control::normal<expr_product_mul_apply> : pegtl::change_state<expr_product_mul_apply, state::binary_expression<ast::mul>, pegtl::normal> {};
+    template<> struct control::normal<expr_product_div_apply> : pegtl::change_state<expr_product_div_apply, state::binary_expression<ast::div>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
 
