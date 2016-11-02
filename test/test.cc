@@ -104,6 +104,7 @@ std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs, std::sh
 std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::and_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::impl>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> assertion(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::assertion>(what, expr); }
+std::shared_ptr<nix::ast::base> with(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::with>(what, expr); }
 std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::name> arg, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::function>(arg, expr); }
 
 
@@ -243,6 +244,12 @@ TEST_CASE("assert") {
     auto a = name("a");
     CHECK_AST("assert true; a", assertion(t, a));
     CHECK_AST("assert true; assert true && true; a", assertion(t, assertion(and_(t,t), a)));
+}
+
+TEST_CASE("with") {
+    auto t = boolean(true);
+    auto a = name("a");
+    CHECK_AST("with true; a", with(t, a));
 }
 
 //TEST_CASE("parameter") {

@@ -169,6 +169,13 @@ namespace ast {
         const std::shared_ptr<ast::base> what;
     };
 
+    struct with : public statement {
+        explicit with(const std::shared_ptr<ast::base> what, const std::shared_ptr<ast::base> expr) : statement(expr), what(what) {}
+        virtual void stream(std::ostream& o) const override { o << "with " << what << "; " << expr; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const with*>(o); return cast && statement::operator==(cast) && what == cast->what; }
+        const std::shared_ptr<ast::base> what;
+    };
+
 
 } // namespace ast
 
@@ -495,7 +502,9 @@ namespace keyword {
 
 // todo: restrict context?
     template<typename CTX>
-    struct with : pegtl::if_must<keyword::key_with, expression<>, padr<pegtl::one<';'>>, expression<CTX>> {};
+    struct with_apply : expression<CTX> {};
+    template<typename CTX>
+    struct with : pegtl::if_must<keyword::key_with, expression<>, padr<pegtl::one<';'>>, with_apply<CTX>> {};
     template<typename CTX>
     struct let : pegtl::if_must<keyword::key_let, binds<keyword::key_in>, expression<CTX>> {};
     template<typename CTX>
@@ -604,7 +613,7 @@ namespace keyword {
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
     template<typename x> struct control::normal<assert_apply<x>> : pegtl::change_state<assert_apply<x>, state::binary_expression<ast::assertion>, pegtl::normal> {};
-
+    template<typename x> struct control::normal<with_apply<x>> : pegtl::change_state<with_apply<x>, state::binary_expression<ast::with>, pegtl::normal> {};
 
 
     template<typename Rule>
