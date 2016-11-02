@@ -93,6 +93,7 @@ void check(S&& str) {
 std::shared_ptr<nix::ast::base> boolean(bool v) { return std::make_shared<nix::ast::boolean>(v); }
 std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<nix::ast::string>(v); }
 std::shared_ptr<nix::ast::base> number(long long v) { return std::make_shared<nix::ast::number>(v); }
+std::shared_ptr<nix::ast::base> not_(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::not_>(v); }
 std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::negate>(v); }
 std::shared_ptr<nix::ast::base> plus(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::plus>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> minus(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::minus>(lhs, rhs); }
@@ -117,9 +118,9 @@ TEST_CASE("comments") {
 TEST_CASE("boolean expression") {
     check("true", true);
     check("false", false);
-    check("!true", false);
-    check("!\ttrue", false);
-    check("!(!true)", true);
+    CHECK_AST("!true", not_(boolean(true)));
+    CHECK_AST("!\ttrue", not_(boolean(true)));
+    CHECK_AST("!(!true)", not_(not_(boolean(true))));
     CHECK_AST("true", boolean(true));
 }
 
@@ -150,15 +151,14 @@ TEST_CASE("bla") {
 
 TEST_CASE("number") {
     check("1337", 1337);
-    check("-1337"s, "(-1337)"s);
     CHECK_AST("-1337", negate(number(1337)));
     check("--1337", 1337);
 }
 
 TEST_CASE("arithmetic sum") {
-    check("-23 + 42", "((-23)+42)"s);
+    CHECK_AST("-23 + 42", plus(negate(number(23)), number(42)));
     check("23 - 42", "(23-42)"s);
-    check("23 - -42", "(23-(-42))"s);
+    CHECK_AST("23 - -42", minus(number(23), negate(number(42))));
     check("1 + 2 + 3", "((1+2)+3)"s);
     CHECK_AST("1 + 2 + 3", plus(plus(number(1), number(2)),number(3)));
     check("1 - 2 - 3", "((1-2)-3)"s);
@@ -166,8 +166,8 @@ TEST_CASE("arithmetic sum") {
 
 TEST_CASE("arithmetic product") {
     check("23 * 42", "(23*42)"s);
-    check("-23 * 42", "((-23)*42)"s);
-    check("23 * -42", "(23*(-42))"s);
+    CHECK_AST("-23 * 42", mul(negate(number(23)), number(42)));
+    CHECK_AST("23 * -42", mul(number(23), negate(number(42))));
     CHECK_AST("1 * 2 * 3", mul(mul(number(1), number(2)), number(3)));
     CHECK_AST("1 * -2 * 3", mul(mul(number(1), negate(number(2))), number(3)));
     CHECK_AST("1 / -2",  div(number(1), negate(number(2))));

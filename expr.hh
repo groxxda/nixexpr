@@ -73,20 +73,17 @@ namespace ast {
         bool data;
     };
 
-    struct not_ : public base {
-        explicit not_(std::shared_ptr<base> in_data) : base(), data(in_data) {};
-        virtual void stream(std::ostream& o) const override { o << "!(" << data << ")"; }
-        std::shared_ptr<base> data;
+    template<char op>
+    struct unary_expression : public base {
+        explicit unary_expression(std::shared_ptr<base> value) : base(), value(value) {}
+        virtual void stream(std::ostream& o) const override { o << op << value; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const unary_expression<op>*>(o); return cast && value == cast->value; }
+        std::shared_ptr<base> value;
     };
 
-    struct negate : public base {
-        explicit negate(std::shared_ptr<base> in_data) : base(), data(in_data) {};
-        template<typename BASE>
-        explicit negate(BASE&& in_data) : base(), data(std::make_shared<BASE>(std::forward<BASE>(in_data))) {}
-        virtual void stream(std::ostream& o) const override { o << "(-" << data << ")"; }
-        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const negate*>(o); return cast && data == cast->data; }
-        std::shared_ptr<base> data;
-    };
+    struct not_ : public unary_expression<'!'> { using unary_expression<'!'>::unary_expression; };
+
+    struct negate : public unary_expression<'-'> { using unary_expression<'-'>::unary_expression; };
 
     template<char op>
     struct binary_expression : public base {
@@ -509,15 +506,6 @@ namespace keyword {
     struct action : pegtl::nothing<Rule> {};
 
 
-    template<> struct action<expr_negate_val> {
-        template<typename Input>
-        static void apply(const Input& in, state::base& state) {
-            assert(state.value);
-            state.value = std::make_shared<ast::negate>(std::move(state.value));
-        }
-    };
-
-
     namespace actions {
         template<typename Rule>
         struct binds : action<Rule> {};
@@ -654,12 +642,17 @@ namespace keyword {
 
     template<> struct action<expr_not_val> {
         template<typename Input>
-        static void apply(const Input& in, state::expression& state) {
-            auto is_boolean = std::dynamic_pointer_cast<ast::boolean>(state.value);
-            if (is_boolean)
-                is_boolean->data = !is_boolean->data;
-            else
-                state.value = std::make_shared<ast::not_>(std::move(state.value));
+        static void apply(const Input& in, state::base& state) {
+            assert(state.value);
+            state.value = std::make_shared<ast::not_>(std::move(state.value));
+        }
+    };
+
+    template<> struct action<expr_negate_val> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {
+            assert(state.value);
+            state.value = std::make_shared<ast::negate>(std::move(state.value));
         }
     };
 
