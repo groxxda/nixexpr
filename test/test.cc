@@ -213,7 +213,7 @@ TEST_CASE("table merge") {
 }
 
 TEST_CASE("function") {
-    //CHECK_AST("a: 1", function(name("a"), number(1)));
+    CHECK_AST("a: 1", function(name("a"), number(1)));
 }
 
 

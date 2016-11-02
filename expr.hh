@@ -165,11 +165,9 @@ namespace ast {
         virtual void stream(std::ostream& o) const override { o << "let " << lhs << "in " << rhs; }
     };
 
-    struct function : public statement {
-        explicit function(std::shared_ptr<ast::base> argument, std::shared_ptr<ast::base> expr) : statement(expr), argument(argument) {}
-        virtual void stream(std::ostream& o) const override { o << argument << ": " << expr; }
-        virtual bool operator==(const base* o) { auto cast = dynamic_cast<const function*>(o); return cast && argument == cast->argument && expr == cast->expr; }
-        const std::shared_ptr<ast::base> argument;
+    struct function : public binary_expression<'f', 'u', 'n'> {
+        using binary_expression<'f', 'u', 'n'>::binary_expression;
+        virtual void stream(std::ostream& o) const override { o << lhs << ": " << rhs; }
     };
 
     struct assertion : public statement {
@@ -350,6 +348,10 @@ namespace keyword {
 
 } // namespace keyword
 
+    struct do_backtrack : pegtl::success {};
+    template<typename from>
+    struct backtrack : pegtl::seq<do_backtrack, pegtl::failure> {};
+
     struct name : pegtl::seq<pegtl::at<identifier_first>, pegtl::not_at<keyword::forbidden>, identifier> {};
 
     struct path_char : pegtl::sor<pegtl::identifier_other, pegtl::one<'.', '-', '+'>> {};
@@ -378,9 +380,9 @@ namespace keyword {
     struct argument_single : pegtl::seq<pegtl::one<':'>, padr<pegtl::sor<sep, pegtl::at<pegtl::one<'[', '(', '{','!'>>>>> {};
     struct argument_formals : pegtl::seq<padr<pegtl::one<'{'>>, formals, pegtl::one<'}'>> {};
     struct argument_set_prebind : pegtl::seq<pegtl::if_must<padr<pegtl::one<'@'>>, padr<argument_formals>>, padr<pegtl::one<':'>>> {};
-    struct argument_set_postbind : pegtl::seq<padr<argument_formals>, pegtl::opt<padr<pegtl::one<'@'>>, padr<name>>, padr<pegtl::one<':'>>> {};
-    struct argument_prebind : pegtl::seq<padr<name>, pegtl::sor<argument_set_prebind, argument_single>> {};
-    struct arguments : pegtl::plus<pegtl::sor<argument_set_postbind, argument_prebind>> {};
+    struct argument_set_postbind : pegtl::sor<pegtl::seq<padr<argument_formals>, pegtl::opt<padr<pegtl::one<'@'>>, padr<name>>, padr<pegtl::one<':'>>>, backtrack<argument_set_postbind>> {};
+    struct argument_prebind : pegtl::seq<padr<name>, pegtl::sor<argument_set_prebind, argument_single, backtrack<argument_prebind>>> {};
+    struct arguments : pegtl::sor<argument_set_postbind, argument_prebind> {};
 
 
     struct bind;
@@ -528,7 +530,9 @@ namespace keyword {
     struct let : pegtl::if_must<keyword::key_let, binds<keyword::key_in>, let_apply<CTX>> {};
 
     template<typename CTX>
-    struct function : pegtl::if_must<arguments, expression<CTX>> {};
+    struct function_apply;
+    template<typename CTX>
+    struct function : pegtl::if_must<arguments, function_apply<CTX>> {};
 
     template<typename CTX>
     struct statement : pegtl::sor<assert<CTX>, with<CTX>, let<CTX>, function<CTX>> {}; // seq<.., /*expr_import,*/>
@@ -539,6 +543,8 @@ namespace keyword {
     template<> struct expression<string> : pegtl::sor<statement<string>, expr_if<string>, expr_add> {};
     template<> struct expression<table> : pegtl::sor<statement<table>, expr_if<table>, expr_setplus<table>> {};
 
+    template<typename CTX>
+    struct function_apply : expression<CTX> {};
 
     struct grammar : pegtl::must<seps, expression<>, pegtl::eof> {};
 
@@ -602,8 +608,9 @@ namespace keyword {
     template<typename x> struct control::normal<assert_apply<x>> : pegtl::change_state<assert_apply<x>, state::binary_expression<ast::assertion>, pegtl::normal> {};
     template<typename x> struct control::normal<with_apply<x>> : pegtl::change_state<with_apply<x>, state::binary_expression<ast::with>, pegtl::normal> {};
     template<typename x> struct control::normal<let_apply<x>> : pegtl::change_state<let_apply<x>, state::binary_expression<ast::let> , pegtl::tracer> {};
+    template<typename x> struct control::normal<function_apply<x>> : pegtl::change_state<function_apply<x>, state::binary_expression<ast::function> , pegtl::tracer> {};
+    template<typename x> struct control::normal<backtrack<x>> : pegtl::tracer<backtrack<x>> {};
 
-    template<> struct control::normal<arguments> : pegtl::change_state<arguments, state::base, pegtl::tracer> {};
 
 
     template<typename Rule>
@@ -612,6 +619,12 @@ namespace keyword {
         template<typename Input, typename... States>
         static void raise(const Input& in, States&& ...) {
             throw pegtl::parse_error(error_message, in);
+        }
+    };
+
+    template<> struct action<do_backtrack> {
+        template<typename Input> static void apply(const Input& in, state::base& state) {
+            state.value.reset();
         }
     };
 
