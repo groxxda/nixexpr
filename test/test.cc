@@ -126,10 +126,13 @@ TEST_CASE("boolean expression") {
     CHECK_AST("!(!true)", not_(not_(boolean(true))));
     CHECK_AST("true", boolean(true));
     CHECK_AST("true || true", or_(boolean(true), boolean(true)));
+    CHECK_AST("true || true || true", or_(or_(boolean(true), boolean(true)), boolean(true)));
     CHECK_AST("true && true", and_(boolean(true), boolean(true)));
+    CHECK_AST("true && true && true", and_(and_(boolean(true), boolean(true)), boolean(true)));
     CHECK_AST("true -> true", impl(boolean(true), boolean(true)));
-
-
+    CHECK_AST("true -> true -> true", impl(impl(boolean(true), boolean(true)), boolean(true)));
+    auto t = boolean(true);
+    CHECK_AST("true -> true -> true && true || true -> true && true && true || true && true", impl(impl(impl(t, t), or_(and_(t, t), t)), or_(and_(and_(t, t), t), and_(t, t))));
 }
 
 TEST_CASE("strings") {
