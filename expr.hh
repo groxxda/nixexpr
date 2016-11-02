@@ -85,11 +85,11 @@ namespace ast {
 
     struct negate : public unary_expression<'-'> { using unary_expression<'-'>::unary_expression; };
 
-    template<char op>
+    template<char... op>
     struct binary_expression : public base {
         explicit binary_expression(std::shared_ptr<base> lhs, std::shared_ptr<base> rhs) : base(), lhs(lhs), rhs(rhs) {}
-        virtual void stream(std::ostream& o) const override { o << "(" << lhs << op << rhs << ")"; }
-        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const binary_expression<op>*>(o); return cast && lhs == cast->lhs && rhs == cast->rhs; }
+        virtual void stream(std::ostream& o) const override { o << "(" << lhs; (o << ... << op) << rhs << ")"; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const binary_expression<op...>*>(o); return cast && lhs == cast->lhs && rhs == cast->rhs; }
         std::shared_ptr<base> lhs;
         std::shared_ptr<base> rhs;
     };
