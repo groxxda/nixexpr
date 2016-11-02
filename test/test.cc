@@ -101,6 +101,7 @@ std::shared_ptr<nix::ast::base> mul(std::shared_ptr<nix::ast::base> lhs, std::sh
 std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::div>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::or_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::and_>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::impl>(lhs, rhs); }
 
 
 
@@ -126,6 +127,8 @@ TEST_CASE("boolean expression") {
     CHECK_AST("true", boolean(true));
     CHECK_AST("true || true", or_(boolean(true), boolean(true)));
     CHECK_AST("true && true", and_(boolean(true), boolean(true)));
+    CHECK_AST("true -> true", impl(boolean(true), boolean(true)));
+
 
 }
 

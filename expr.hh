@@ -106,6 +106,9 @@ namespace ast {
 
     struct and_ : public binary_expression<'&', '&'> { using binary_expression<'&', '&'>::binary_expression; };
 
+    struct impl : public binary_expression<'-', '>'> { using binary_expression<'-', '>'>::binary_expression; };
+
+
     struct binds : virtual public base {
         explicit binds(bool recursive) : base(), recursive(recursive) {};
         virtual void stream(std::ostream& o) const override {
@@ -477,9 +480,11 @@ namespace keyword {
     template<typename CTX>
     struct expr_or : pegtl::seq<expr_and<CTX>, pegtl::star<expr_or_apply>> {};
 
-    template<typename CTX> struct expr_impl;
-    template<> struct expr_impl<void> : non_assoc<expr_or<void>, padr<pegtl::string<'-', '>'>>, expr_or<boolean>> {};
-    template<> struct expr_impl<boolean> : non_assoc<expr_or<boolean>, padr<pegtl::string<'-', '>'>>, expr_or<boolean>> {};
+
+    struct operator_impl : padr<pegtl::string<'-', '>'>> {};
+    struct expr_impl_apply : pegtl::if_must<operator_impl, expr_or<boolean>> {};
+    template<typename CTX>
+    struct expr_impl : pegtl::seq<expr_or<CTX>, pegtl::star<expr_impl_apply>> {};
 
 
     template<typename CTX>
@@ -592,6 +597,7 @@ namespace keyword {
     template<> struct control::normal<expr_div_apply> : pegtl::change_state<expr_div_apply, state::binary_expression<ast::div>, pegtl::normal> {};
     template<> struct control::normal<expr_or_apply> : pegtl::change_state<expr_or_apply, state::binary_expression<ast::or_>, pegtl::normal> {};
     template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
+    template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
 
