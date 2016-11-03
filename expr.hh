@@ -565,9 +565,9 @@ namespace keyword {
     struct expr_applying_tail;
 
     struct variable_tail_or : pegtl::if_must<keyword::key_or, expr_applying_tail> {};
-    struct variable_tail : pegtl::seq<pegtl::one<'.'>, seps, pegtl::sor<name, string, dollarcurly_expr>, seps, pegtl::opt<variable_tail_or>> {};
+    struct variable_tail : pegtl::seq<pegtl::sor<name, string, dollarcurly_expr>, seps, pegtl::opt<variable_tail_or>> {};
 
-    struct expr_select : pegtl::seq<pegtl::sor<table, bracket_expr, name>, seps, pegtl::star<variable_tail>> {};
+    struct expr_select : pegtl::seq<pegtl::sor<table, bracket_expr, name>, seps, pegtl::star<pegtl::seq<padr<pegtl::one<'.'>>, variable_tail>>> {};
     struct expr_simple : pegtl::sor<boolean, number, string, array, dollarcurly_expr, spath, path, uri> {};
     struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select> {};
 // XXX reorder, this should be a few lines above near other array stuff
