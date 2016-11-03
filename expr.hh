@@ -131,6 +131,8 @@ namespace ast {
 
     struct impl : public binary_expression<'-', '>'> { using binary_expression<'-', '>'>::binary_expression; };
 
+    struct concat : public binary_expression<'+', '+'> { using binary_expression<'+', '+'>::binary_expression; };
+
     struct binding_eq : public binary_expression<'='> {
         using binary_expression<'='>::binary_expression;
         virtual void stream(std::ostream& o) const override { o << lhs << " = " << rhs; }
@@ -538,14 +540,15 @@ namespace keyword {
     struct expr_attrtest : pegtl::seq<expr_negate<void>, pegtl::opt<pegtl::if_must<pegtl::one<'?'>, seps, attrpath>>> {};
 
 
-    template<typename CTX>
-    struct expr_arrayconcat : right_assoc<expr_attrtest, padr<pegtl::two<'+'>>, expr_apply<array>> {};
-    template<> struct expr_arrayconcat<array> : right_assoc<expr_apply<array>, padr<pegtl::two<'+'>>> {};
+//XXX right assoc?
+    struct operator_concat : padr<pegtl::two<'+'>> {};
+    struct expr_concat_apply : pegtl::if_must<operator_concat, expr_apply<array>> {};
+    struct expr_concat : pegtl::seq<expr_attrtest, pegtl::star<expr_concat_apply>> {};
 
 
     struct operator_div : op_one<'/', '/'> {};
     struct expr_div_apply : pegtl::if_must<operator_div, expr_negate<number>> {};
-    struct expr_div : pegtl::seq<expr_arrayconcat<void>, pegtl::star<expr_div_apply>> {};
+    struct expr_div : pegtl::seq<expr_concat, pegtl::star<expr_div_apply>> {};
 
 
     struct operator_mul : padr<pegtl::one<'*'>> {};
@@ -748,6 +751,7 @@ namespace keyword {
     template<> struct control::normal<expr_sub_apply> : pegtl::change_state<expr_sub_apply, state::binary_expression<ast::sub>, pegtl::normal> {};
     template<> struct control::normal<expr_mul_apply> : pegtl::change_state<expr_mul_apply, state::binary_expression<ast::mul>, pegtl::normal> {};
     template<> struct control::normal<expr_div_apply> : pegtl::change_state<expr_div_apply, state::binary_expression<ast::div>, pegtl::normal> {};
+    template<> struct control::normal<expr_concat_apply> : pegtl::change_state<expr_concat_apply, state::binary_expression<ast::concat>, pegtl::normal> {};
     template<> struct control::normal<expr_or_apply> : pegtl::change_state<expr_or_apply, state::binary_expression<ast::or_>, pegtl::normal> {};
     template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
     template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
