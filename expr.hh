@@ -816,6 +816,7 @@ namespace keyword {
     template<> struct control::normal<expr_or_apply> : pegtl::change_state<expr_or_apply, state::binary_expression<ast::or_>, pegtl::normal> {};
     template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
     template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
+    template<> struct control::normal<variable_tail> : pegtl::change_state<variable_tail, state::binary_expression<ast::attrpath>, pegtl::normal> {};
     template<> struct control::normal<attrpath_apply> : pegtl::change_state<attrpath_apply, state::binary_expression<ast::attrpath>, pegtl::normal> {};
     template<> struct control::normal<expr_attrtest_apply> : pegtl::change_state<expr_attrtest_apply, state::binary_expression<ast::attrtest>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
