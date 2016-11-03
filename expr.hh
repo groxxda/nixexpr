@@ -70,6 +70,14 @@ namespace ast {
         const std::vector<std::shared_ptr<ast::base>> parts;
     };
 
+    struct long_string : public base {
+        explicit long_string(const std::vector<std::shared_ptr<ast::base>> parts, const unsigned int prefixlen) : base(), parts(parts), prefixlen(prefixlen) {}
+        virtual void stream(std::ostream& o) const override { o << "''"; for (const auto& i : parts) o << *i; o << "''"; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const long_string*>(o); return cast && parts == cast->parts; }
+        const std::vector<std::shared_ptr<ast::base>> parts;
+        const unsigned int prefixlen;
+    };
+
     struct name : public base {
         explicit name(std::string in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << data; }
@@ -237,14 +245,11 @@ namespace state {
         }
     };
 
-    struct string : base {
+    struct any_string : base {
         std::vector<std::shared_ptr<ast::base>> data;
         std::string unescaped;
 
         void push_back() {
-            std::cout << "state::string::push_back" <<std::endl;
-            std::cout << "value: " << value << std::endl;
-            //assert(unescaped);
             assert(!value);
             data.push_back(std::make_shared<ast::string_literal>(std::move(unescaped)));
             unescaped = std::string();
@@ -259,11 +264,26 @@ namespace state {
             data.push_back(std::make_shared<ast::dollar_curly>(std::move(value)));
         }
 
+    };
+
+    struct string : any_string {
         void success(base& in_result) {
             std::cout << "state::string::success" << data.size() << std::endl;
             assert(!value);
             assert(!in_result.value);
             in_result.value = std::make_shared<ast::short_string>(std::move(data));
+        }
+    };
+
+    struct long_string : any_string {
+        unsigned int prefix_len;
+
+        void prefix(unsigned int prefix) { prefix_len = std::min(prefix_len, prefix); }
+
+        void success(base& in_result) {
+            assert(!value);
+            assert(!in_result.value);
+            in_result.value = std::make_shared<ast::long_string>(std::move(data), prefix_len);
         }
     };
 
@@ -385,9 +405,13 @@ struct short_string_character : pegtl::if_must_else<pegtl::one<'\\'>, short_stri
 struct short_string_content : pegtl::until<pegtl::one<'"'>, pegtl::sor<dollarcurly_expr, short_string_character>> {};
 struct short_string : pegtl::if_must<pegtl::one<'"'>, short_string_content> {};
 // XXX: add prefix stripping
-struct long_string_escaped : pegtl::seq<pegtl::two<'\''>, pegtl::sor<pegtl::one<'\''>, pegtl::one<'$'>, pegtl::seq<pegtl::one<'\\'>, pegtl::one<'n', 'r', 't'>>>> {};
-struct long_string_content : pegtl::star<pegtl::sor<long_string_escaped, dollarcurly_expr, pegtl::seq<pegtl::not_at<pegtl::two<'\''>>, pegtl::any>>> {};
+
+struct long_string_escape_accepted : pegtl::sor<pegtl::one<'\''>, pegtl::one<'$'>, pegtl::seq<pegtl::one<'\\'>, pegtl::one<'n', 'r', 't'>>> {};
+struct long_string_escaped : pegtl::seq<pegtl::two<'\''>, long_string_escape_accepted> {};
+struct long_string_accepted : pegtl::seq<pegtl::not_at<pegtl::two<'\''>>, pegtl::any> {};
+struct long_string_content : pegtl::star<pegtl::sor<long_string_escaped, dollarcurly_expr, long_string_accepted>> {};
 struct long_string : pegtl::if_must<pegtl::two<'\''>, long_string_content, pegtl::two<'\''>> {};
+
 struct string : pegtl::sor<short_string, long_string> {};
 
 struct sep : pegtl::sor<pegtl::ascii::space, comment> {};
@@ -753,11 +777,20 @@ namespace keyword {
         };
 
         template<> struct string<dollarcurly_expr> {
-            template<typename Input> static void apply(const Input& in, state::string& state) {
+            template<typename Input> static void apply(const Input& in, state::any_string& state) {
                 state.push_back_expr();
             }
         };
 
+        template<> struct string<long_string_escape_accepted> : pegtl::unescape::append_all {};
+        template<> struct string<long_string_accepted> : pegtl::unescape::append_all {};
+
+        template<> struct string<long_string_content> {
+            template<typename Input>
+            static void apply(const Input& in, state::long_string& state) {
+                state.push_back();
+            }
+        };
     } // namespace actions
 
 
@@ -785,6 +818,7 @@ namespace keyword {
     template<typename x> struct control::normal<function_apply<x>> : pegtl::change_state<function_apply<x>, state::binary_expression<ast::function> , pegtl::tracer> {};
     template<typename x> struct control::normal<expr_if_apply<x>> : pegtl::change_state_and_action<expr_if_apply<x>, state::if_then_else, actions::if_then_else, pegtl::tracer> {};
     template<> struct control::normal<short_string_content> : pegtl::change_state_and_action<short_string_content, state::string, actions::string, pegtl::tracer> {};
+    template<> struct control::normal<long_string_content> : pegtl::change_state_and_action<long_string_content, state::long_string, actions::string, pegtl::tracer> {};
     template<typename x> struct control::normal<backtrack<x>> : pegtl::tracer<backtrack<x>> {};
 
 
@@ -819,13 +853,6 @@ namespace keyword {
     };
 
 
-    template<> struct action<long_string_content> {
-        template<typename Input>
-        static void apply(const Input& in, state::base& state) {
-            //xxx: can we move here?
-            state.value = std::make_shared<ast::string>(in.string());
-        }
-    };
 
 
     template<> struct action<keyword::key_true> {
