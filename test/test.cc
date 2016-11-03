@@ -104,6 +104,7 @@ std::shared_ptr<nix::ast::base> sub(std::shared_ptr<nix::ast::base> lhs, std::sh
 std::shared_ptr<nix::ast::base> mul(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::mul>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::div>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> concat(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::concat>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> merge(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::merge>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::or_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::and_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::impl>(lhs, rhs); }
@@ -111,6 +112,7 @@ std::shared_ptr<nix::ast::base> assertion(std::shared_ptr<nix::ast::base> what, 
 std::shared_ptr<nix::ast::base> with(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::with>(what, expr); }
 std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::base> arg, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::function>(arg, expr); }
 std::shared_ptr<nix::ast::base> array(std::initializer_list<std::shared_ptr<nix::ast::base>> values) { return std::make_shared<nix::ast::array>(std::vector<std::shared_ptr<nix::ast::base>>(values)); }
+std::shared_ptr<nix::ast::base> table(std::initializer_list<std::shared_ptr<nix::ast::base>> binds, bool recursive = false) { return std::make_shared<nix::ast::table>(std::make_shared<nix::ast::binds>(std::vector<std::shared_ptr<nix::ast::base>>(binds)), recursive); }
 std::shared_ptr<nix::ast::base> if_then_else(std::shared_ptr<nix::ast::base> test, std::shared_ptr<nix::ast::base> then_expr, std::shared_ptr<nix::ast::base> else_expr) { return std::make_shared<nix::ast::if_then_else>(test, then_expr, else_expr); }
 
 
@@ -214,7 +216,7 @@ TEST_CASE("table") {
 }
 
 TEST_CASE("table merge") {
-    //check("{ } // {}"s);
+    CHECK_AST("{ } // {}", merge(table({}), table({})));
 }
 
 TEST_CASE("function") {

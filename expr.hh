@@ -133,6 +133,9 @@ namespace ast {
 
     struct concat : public binary_expression<'+', '+'> { using binary_expression<'+', '+'>::binary_expression; };
 
+    struct merge : public binary_expression<'/', '/'> { using binary_expression<'/', '/'>::binary_expression; };
+
+
     struct binding_eq : public binary_expression<'='> {
         using binary_expression<'='>::binary_expression;
         virtual void stream(std::ostream& o) const override { o << lhs << " = " << rhs; }
@@ -153,6 +156,7 @@ namespace ast {
     struct binds : public base {
         explicit binds(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) {};
         virtual void stream(std::ostream& o) const override { for (const auto& i : data) o << i << "; "; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const binds*>(o); return cast && data == cast->data; }
         const std::vector<std::shared_ptr<ast::base>> data;
     };
 
@@ -571,13 +575,16 @@ namespace keyword {
     struct expr_not_val : expr_attrtest {};
     struct expr_not : pegtl::seq<pegtl::star<operator_not_double>, pegtl::if_then_else<operator_not, expr_not_val, expr_add>> {};
 
-    template<typename CTX>
-    struct expr_setplus : right_assoc<expr_not, padr<pegtl::two<'/'>>, expr_apply<table>> {};
-    template<> struct expr_setplus<table> : right_assoc<expr_apply<table>, padr<pegtl::two<'/'>>> {};
+
+//XXX: right assoc
+    struct operator_merge : padr<pegtl::two<'/'>> {};
+    struct expr_merge_apply : pegtl::if_must<operator_merge, expr_apply<table>> {};
+    struct expr_merge : pegtl::seq<expr_not, pegtl::star<expr_merge_apply>> {};
+
 
     struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>, pegtl::string<'>', '='>, pegtl::one<'<', '>'>>> {};
     template<typename CTX>
-    struct expr_ordering : left_assoc<expr_setplus<CTX>, operators_ordering, expr_add> {};
+    struct expr_ordering : left_assoc<expr_merge, operators_ordering, expr_add> {};
     //template<> struct expr_ordering<number> : left_assoc<expr_sum<number>, operators_ordering> {};
 
     struct operators_equality : padr<pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>>> {};
@@ -641,7 +648,7 @@ namespace keyword {
     template<> struct expression<void> : pegtl::sor<statement<void>, expr_if<void>, expr_impl<void>> {};
     template<> struct expression<boolean> : pegtl::sor<statement<boolean>, expr_if<boolean>, expr_impl<boolean>> {};
     template<> struct expression<string> : pegtl::sor<statement<string>, expr_if<string>, expr_add> {};
-    template<> struct expression<table> : pegtl::sor<statement<table>, expr_if<table>, expr_setplus<table>> {};
+    template<> struct expression<table> : pegtl::sor<statement<table>, expr_if<table>, expr_merge> {};
 
     template<typename CTX>
     struct function_apply : expression<CTX> {};
@@ -752,6 +759,7 @@ namespace keyword {
     template<> struct control::normal<expr_mul_apply> : pegtl::change_state<expr_mul_apply, state::binary_expression<ast::mul>, pegtl::normal> {};
     template<> struct control::normal<expr_div_apply> : pegtl::change_state<expr_div_apply, state::binary_expression<ast::div>, pegtl::normal> {};
     template<> struct control::normal<expr_concat_apply> : pegtl::change_state<expr_concat_apply, state::binary_expression<ast::concat>, pegtl::normal> {};
+    template<> struct control::normal<expr_merge_apply> : pegtl::change_state<expr_merge_apply, state::binary_expression<ast::merge>, pegtl::normal> {};
     template<> struct control::normal<expr_or_apply> : pegtl::change_state<expr_or_apply, state::binary_expression<ast::or_>, pegtl::normal> {};
     template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
     template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
