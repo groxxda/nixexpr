@@ -13,12 +13,15 @@
 using namespace std::literals;
 
 template <typename Str, typename... Args>
+bool parse_nocatch(Str&& str, Args&&... args) {
+    auto res = pegtl::parse_string<nix::parser::grammar, nix::parser::action, nix::parser::control::normal>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
+    return res;
+}
+
+template <typename Str, typename... Args>
 bool parse(Str&& str, Args&&... args) {
     try {
-//        nix::parser::state::base result;
-        //auto res = pegtl::parse_string<grammar, nix::parser::action/*nix::parser::grammar_action*//*pegtl::nothing*/, /*pegtl::normal*/nix::parser::control::normal>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
-        auto res = pegtl::parse_string<nix::parser::grammar, nix::parser::action, /*pegtl::normal*/nix::parser::control::normal>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
-//        std::cout << "result: " << result.result << std::endl;
+        auto res = parse_nocatch(str, args...);
         return res;
     } catch (pegtl::parse_error& e) {
         std::cerr << "Error parsing " << str << ":" << std::endl;
@@ -105,6 +108,7 @@ std::shared_ptr<nix::ast::base> mul(std::shared_ptr<nix::ast::base> lhs, std::sh
 std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::div>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> concat(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::concat>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> merge(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::merge>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> attrtest(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::attrtest>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::or_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::and_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::impl>(lhs, rhs); }
@@ -217,6 +221,12 @@ TEST_CASE("table") {
 
 TEST_CASE("table merge") {
     CHECK_AST("{ } // {}", merge(table({}), table({})));
+}
+
+TEST_CASE("attrtest") {
+    CHECK_AST("{} ? a", attrtest(table({}), "a"_n));
+    nix::parser::state::base res;
+    CHECK_THROWS(parse_nocatch("{} ? a ? b", res));
 }
 
 TEST_CASE("function") {

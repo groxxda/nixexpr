@@ -135,6 +135,8 @@ namespace ast {
 
     struct merge : public binary_expression<'/', '/'> { using binary_expression<'/', '/'>::binary_expression; };
 
+    struct attrtest : public binary_expression<'?'> { using binary_expression<'?'>::binary_expression; };
+
 
     struct binding_eq : public binary_expression<'='> {
         using binary_expression<'='>::binary_expression;
@@ -541,7 +543,10 @@ namespace keyword {
     struct expr_negate : pegtl::seq<pegtl::star<operator_negate_double>, pegtl::if_must_else<operator_negate, expr_negate_val, expr_apply<>>> {};
     //template<> struct expr_negate<number> : pegtl::seq<pegtl::star<op_one<'-', '>'>>, expr_apply<number>> {};
 
-    struct expr_attrtest : pegtl::seq<expr_negate<void>, pegtl::opt<pegtl::if_must<pegtl::one<'?'>, seps, attrpath>>> {};
+
+    struct operator_attrtest : padr<pegtl::one<'?'>> {};
+    struct expr_attrtest_apply : pegtl::if_must<operator_attrtest, attrpath> {};
+    struct expr_attrtest : pegtl::seq<expr_negate<void>, pegtl::opt<expr_attrtest_apply>> {};
 
 
 //XXX right assoc?
@@ -763,6 +768,7 @@ namespace keyword {
     template<> struct control::normal<expr_or_apply> : pegtl::change_state<expr_or_apply, state::binary_expression<ast::or_>, pegtl::normal> {};
     template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
     template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
+    template<> struct control::normal<expr_attrtest_apply> : pegtl::change_state<expr_attrtest_apply, state::binary_expression<ast::attrtest>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<> struct control::normal<bind_eq_apply> : pegtl::change_state<bind_eq_apply, state::binary_expression<ast::binding_eq>, pegtl::tracer> {};
     template<> struct control::normal<bind_inherit_apply> : pegtl::change_state<bind_inherit_apply, state::binding_inherit, pegtl::tracer> {};
