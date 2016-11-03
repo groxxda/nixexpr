@@ -85,6 +85,13 @@ namespace ast {
         std::string data;
     };
 
+    struct path : public base {
+        explicit path(std::string in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << data; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const name*>(o); return cast && data == cast->data; }
+        std::string data;
+    };
+
     struct boolean : public base {
         explicit boolean(bool in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << std::boolalpha << data; }
@@ -146,6 +153,8 @@ namespace ast {
     struct attrtest : public binary_expression<'?'> { using binary_expression<'?'>::binary_expression; };
 
     struct attrpath : public binary_expression<'.'> { using binary_expression<'.'>::binary_expression; };
+
+    struct call : public binary_expression<'c', 'a', 'l', 'l'> { using binary_expression<'c', 'a', 'l', 'l'>::binary_expression; };
 
 
     struct binding_eq : public binary_expression<'='> {
@@ -540,10 +549,10 @@ namespace keyword {
 
 
 
-    struct expr_applying_tail;
+    struct array_content_apply;
 
     struct array_begin : padr<pegtl::one<'['>> {};
-    struct array_content : pegtl::until<pegtl::one<']'>, expr_applying_tail> {};
+    struct array_content : pegtl::until<pegtl::one<']'>, array_content_apply> {};
     struct array : pegtl::if_must<array_begin, array_content> {};
 
     struct dollarcurly_expr : pegtl::if_must<padr<pegtl::string<'$', '{'>>, expression<string>, pegtl::one<'}'>> {};
@@ -551,6 +560,7 @@ namespace keyword {
 
 
 
+    struct expr_applying_tail;
 
     struct variable_tail_or : pegtl::if_must<keyword::key_or, expr_applying_tail> {};
     struct variable_tail : pegtl::seq<pegtl::one<'.'>, seps, pegtl::sor<name, string, dollarcurly_expr>, seps, pegtl::opt<variable_tail_or>> {};
@@ -558,6 +568,8 @@ namespace keyword {
     struct expr_select : pegtl::seq<pegtl::sor<table, bracket_expr, name>, seps, pegtl::star<variable_tail>> {};
     struct expr_simple : pegtl::sor<boolean, number, string, array, dollarcurly_expr, spath, path, uri> {};
     struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select> {};
+// XXX reorder, this should be a few lines above near other array stuff
+    struct array_content_apply : expr_applying_tail {};
     struct expr_applying : pegtl::seq<expr_select, pegtl::star<pegtl::not_at<pegtl::one<';', ','>>, expr_applying_tail>> {};
 // XXX: reactivate CTX?
     template<typename CTX = void>
@@ -724,7 +736,7 @@ namespace keyword {
         template<typename Rule>
         struct array : action<Rule> {};
 
-        template<> struct array<expr_applying_tail> {
+        template<> struct array<array_content_apply> {
             template<typename Input> static void apply(const Input& in, state::array& state) {
                 state.push_back();
             }
@@ -809,6 +821,7 @@ namespace keyword {
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<> struct control::normal<bind_eq_apply> : pegtl::change_state<bind_eq_apply, state::binary_expression<ast::binding_eq>, pegtl::tracer> {};
     template<> struct control::normal<bind_inherit_apply> : pegtl::change_state<bind_inherit_apply, state::binding_inherit, pegtl::tracer> {};
+    template<> struct control::normal<expr_applying_tail> : pegtl::change_state<expr_applying_tail, state::binary_expression<ast::call>, pegtl::tracer> {};
     template<> struct control::normal<formal_apply> : pegtl::change_state_and_action<formal_apply, state::binary_expression<ast::formal>, action, pegtl::tracer> {};
     template<> struct control::normal<formals> : pegtl::change_state_and_action<formals, state::formals, actions::formals, pegtl::tracer> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::tracer> {};
@@ -849,6 +862,14 @@ namespace keyword {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
             state.value = std::make_shared<ast::name>(in.string());
+        }
+    };
+
+    template<> struct action<path> {
+        template<typename Input>
+        static void apply(const Input& in, state::base& state) {
+            assert(!state.value);
+            state.value = std::make_shared<ast::path>(in.string());
         }
     };
 
