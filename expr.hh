@@ -497,7 +497,7 @@ namespace keyword {
     struct attrtail : pegtl::sor<name, string, dollarcurly_expr> {};
 
     struct attrpath_apply : pegtl::if_must<padr<pegtl::one<'.'>>, padr<attrtail>> {};
-    struct attrpath : pegtl::seq<attr, pegtl::star<attrpath_apply>> {};
+    struct attrpath : pegtl::seq<padr<attr>, pegtl::star<attrpath_apply>> {};
 
     template<typename CTX = void>
     struct expression;
@@ -851,8 +851,6 @@ namespace keyword {
             state.value = std::make_shared<ast::name>(in.string());
         }
     };
-
-
 
 
     template<> struct action<keyword::key_true> {
