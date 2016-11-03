@@ -154,6 +154,8 @@ namespace ast {
 
     struct attrpath : public binary_expression<'.'> { using binary_expression<'.'>::binary_expression; };
 
+    struct set_or : public binary_expression<'o', 'r'> { using binary_expression<'o', 'r'>::binary_expression; };
+
     struct call : public binary_expression<'c', 'a', 'l', 'l'> { using binary_expression<'c', 'a', 'l', 'l'>::binary_expression; };
 
 
@@ -823,6 +825,7 @@ namespace keyword {
     template<> struct control::normal<bind_eq_apply> : pegtl::change_state<bind_eq_apply, state::binary_expression<ast::binding_eq>, pegtl::tracer> {};
     template<> struct control::normal<bind_inherit_apply> : pegtl::change_state<bind_inherit_apply, state::binding_inherit, pegtl::tracer> {};
     template<> struct control::normal<expr_applying_tail> : pegtl::change_state<expr_applying_tail, state::binary_expression<ast::call>, pegtl::tracer> {};
+    template<> struct control::normal<variable_tail_or> : pegtl::change_state<variable_tail_or, state::binary_expression<ast::set_or>, pegtl::tracer> {};
     template<> struct control::normal<formal_apply> : pegtl::change_state_and_action<formal_apply, state::binary_expression<ast::formal>, action, pegtl::tracer> {};
     template<> struct control::normal<formals> : pegtl::change_state_and_action<formals, state::formals, actions::formals, pegtl::tracer> {};
     template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::tracer> {};
