@@ -137,6 +137,8 @@ namespace ast {
 
     struct attrtest : public binary_expression<'?'> { using binary_expression<'?'>::binary_expression; };
 
+    struct attrpath : public binary_expression<'.'> { using binary_expression<'.'>::binary_expression; };
+
 
     struct binding_eq : public binary_expression<'='> {
         using binary_expression<'='>::binary_expression;
@@ -470,7 +472,8 @@ namespace keyword {
     struct attr : pegtl::sor<name, string, dollarcurly_expr> {};
     struct attrtail : pegtl::sor<name, string, dollarcurly_expr> {};
 
-    struct attrpath : pegtl::list_must<padr<attrtail>, padr<pegtl::one<'.'>>> {};
+    struct attrpath_apply : pegtl::if_must<padr<pegtl::one<'.'>>, padr<attrtail>> {};
+    struct attrpath : pegtl::seq<attr, pegtl::star<attrpath_apply>> {};
 
     template<typename CTX = void>
     struct expression;
@@ -503,8 +506,8 @@ namespace keyword {
     //struct bind_eq_attrpath : attrpath {};
     struct bind_eq_operator : padr<pegtl::one<'='>> {};
     struct bind_eq_apply : pegtl::seq<expression<>, padr<pegtl::one<';'>>> {};
-    struct bind_eq : pegtl::seq<padr<attr>, pegtl::if_must<bind_eq_operator, bind_eq_apply>> {};
-    struct bind_inherit_attrname : attr {};
+    struct bind_eq : pegtl::seq<padr<attrpath>, pegtl::if_must<bind_eq_operator, bind_eq_apply>> {};
+    struct bind_inherit_attrname : attrpath {};
     struct bind_inherit_from : pegtl::if_must<padr<pegtl::one<'('>>, expression<table>, padr<pegtl::one<')'>>> {};
     struct bind_inherit_apply : pegtl::seq<pegtl::opt<bind_inherit_from>, pegtl::star<padr<bind_inherit_attrname>>, padr<pegtl::one<';'>>> {};
     struct bind_inherit : pegtl::if_must<keyword::key_inherit, bind_inherit_apply> {};
@@ -768,6 +771,7 @@ namespace keyword {
     template<> struct control::normal<expr_or_apply> : pegtl::change_state<expr_or_apply, state::binary_expression<ast::or_>, pegtl::normal> {};
     template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
     template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
+    template<> struct control::normal<attrpath_apply> : pegtl::change_state<attrpath_apply, state::binary_expression<ast::attrpath>, pegtl::normal> {};
     template<> struct control::normal<expr_attrtest_apply> : pegtl::change_state<expr_attrtest_apply, state::binary_expression<ast::attrtest>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
     template<> struct control::normal<bind_eq_apply> : pegtl::change_state<bind_eq_apply, state::binary_expression<ast::binding_eq>, pegtl::tracer> {};

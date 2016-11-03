@@ -109,12 +109,14 @@ std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs, std::sh
 std::shared_ptr<nix::ast::base> concat(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::concat>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> merge(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::merge>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> attrtest(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::attrtest>(lhs, rhs); }
+std::shared_ptr<nix::ast::base> attrpath(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::attrpath>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::or_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::and_>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::impl>(lhs, rhs); }
 std::shared_ptr<nix::ast::base> assertion(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::assertion>(what, expr); }
 std::shared_ptr<nix::ast::base> with(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::with>(what, expr); }
 std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::base> arg, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::function>(arg, expr); }
+std::shared_ptr<nix::ast::base> bind(std::shared_ptr<nix::ast::base> name, std::shared_ptr<nix::ast::base> value) { return std::make_shared<nix::ast::binding_eq>(name, value); }
 std::shared_ptr<nix::ast::base> array(std::initializer_list<std::shared_ptr<nix::ast::base>> values) { return std::make_shared<nix::ast::array>(std::vector<std::shared_ptr<nix::ast::base>>(values)); }
 std::shared_ptr<nix::ast::base> table(std::initializer_list<std::shared_ptr<nix::ast::base>> binds, bool recursive = false) { return std::make_shared<nix::ast::table>(std::make_shared<nix::ast::binds>(std::vector<std::shared_ptr<nix::ast::base>>(binds)), recursive); }
 std::shared_ptr<nix::ast::base> if_then_else(std::shared_ptr<nix::ast::base> test, std::shared_ptr<nix::ast::base> then_expr, std::shared_ptr<nix::ast::base> else_expr) { return std::make_shared<nix::ast::if_then_else>(test, then_expr, else_expr); }
@@ -207,7 +209,9 @@ TEST_CASE("arithmetic mixed") {
 
 TEST_CASE("table") {
     check("{ }"s);
+    CHECK_AST("{}", table({}));
     check("rec { }"s);
+    CHECK_AST("rec {}", table({}, true));
     check("{ a = 1; }"s);
     check("rec { a = 1; }"s);
     check("{ a = 1; b = \"c\"; }"s);
@@ -217,6 +221,7 @@ TEST_CASE("table") {
     check("{ inherit (a) b; }"s);
     check("{ inherit (a) b c; }"s);
     check("{ inherit (a) b; inherit c; inherit (d) e; }"s);
+    CHECK_AST("{ a.b = 1; }"s, table({bind(attrpath("a"_n, "b"_n),  1_n)}, false));
 }
 
 TEST_CASE("table merge") {
@@ -225,6 +230,7 @@ TEST_CASE("table merge") {
 
 TEST_CASE("attrtest") {
     CHECK_AST("{} ? a", attrtest(table({}), "a"_n));
+    CHECK_AST("{} ? a.b", attrtest(table({}), attrpath("a"_n, "b"_n)));
     nix::parser::state::base res;
     CHECK_THROWS(parse_nocatch("{} ? a ? b", res));
 }
