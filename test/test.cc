@@ -157,10 +157,10 @@ TEST_CASE("strings") {
     check("\"shortstring\""s);
     check("\"shortstring with \\\" escape\""s, "\"shortstring with \" escape\""s);
     CHECK_AST("\"xyz\"", string("xyz"));
-//    check("\"shortstring with dollarcurly ${true}\""s);
-//    check("\"shortstring with dollarcurlys ${true}${true}\""s);
+    check("\"shortstring with dollarcurly ${true}\""s);
+    check("\"shortstring with dollarcurlys ${true}${true}\""s);
     check("\"shortstring with dollarcurly ${\"with inner string\"}\""s);
-//    check("\"shortstring with nested dollarcurly ${\"[outer,${\"<inner>\"}]\"}\""s);
+    check("\"shortstring with nested dollarcurly ${\"[outer,${\"<inner>\"}]\"}\""s);
     check("''''"s, "\"\""s);
     check("''longstring''"s, "\"longstring\""s);
 //    check("''longstring with ''' escape''"s, "\"longstring with ' escape\""s);
