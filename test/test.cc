@@ -292,15 +292,15 @@ TEST_CASE("if then else") {
     CHECK_AST("if true then \"yes\" else \"false\"", if_then_else(boolean(true), "yes"_s, "false"_s));
 }
 
-//
-//TEST_CASE("complex") {
-//
-//    CHECK(parse("let requiredVersion = import ./lib/minver.nix; in\n"
-//            "if ! builtins ? nixVersion || builtins.compareVersions requiredVersion builtins.nixVersion == 1 then \n"
-//            "  abort \"This version of Nixpkgs requires Nix >= ${requiredVersion}, please upgrade! See https://nixos.org/wiki/How_to_update_when_Nix_is_too_old_to_evaluate_Nixpkgs\"\n"
-//            "else\n"
-//            "  import ./pkgs/top-level/impure.nix"));
-//}
+
+TEST_CASE("complex") {
+
+    check("let requiredVersion = import ./lib/minver.nix; in\n"
+            "if ! builtins ? nixVersion || builtins.compareVersions requiredVersion builtins.nixVersion == 1 then \n"
+            "  abort \"This version of Nixpkgs requires Nix >= ${requiredVersion}, please upgrade! See https://nixos.org/wiki/How_to_update_when_Nix_is_too_old_to_evaluate_Nixpkgs\"\n"
+            "else\n"
+            "  import ./pkgs/top-level/impure.nix"s);
+}
 
 
 

@@ -156,7 +156,7 @@ namespace ast {
 
     struct set_or : public binary_expression<'o', 'r'> { using binary_expression<'o', 'r'>::binary_expression; };
 
-    struct call : public binary_expression<'c', 'a', 'l', 'l'> { using binary_expression<'c', 'a', 'l', 'l'>::binary_expression; };
+    struct call : public binary_expression<' '> { using binary_expression<' '>::binary_expression; };
 
 
     struct binding_eq : public binary_expression<'='> {
@@ -410,9 +410,9 @@ struct string;
 
 struct dollarcurly_expr;
 
-struct short_string_escaped : pegtl::one<'"', '$', '\\'> {};
+struct short_string_escaped : pegtl::one<'"', '$', '\\', 'n'> {};
 struct short_string_accepted : pegtl::any {};
-struct short_string_character : pegtl::if_must_else<pegtl::one<'\\'>, short_string_escaped, short_string_accepted> {};
+struct short_string_character : pegtl::sor<pegtl::seq<pegtl::one<'\\'>, short_string_escaped>, short_string_accepted> {};
 struct short_string_content : pegtl::until<pegtl::one<'"'>, pegtl::sor<dollarcurly_expr, short_string_character>> {};
 struct short_string : pegtl::if_must<pegtl::one<'"'>, short_string_content> {};
 // XXX: add prefix stripping
@@ -633,10 +633,11 @@ namespace keyword {
     struct expr_ordering : left_assoc<expr_merge, operators_ordering, expr_add> {};
     //template<> struct expr_ordering<number> : left_assoc<expr_sum<number>, operators_ordering> {};
 
-    struct operators_equality : padr<pegtl::sor<pegtl::two<'='>, pegtl::string<'!', '='>>> {};
+    template<char... CMP>
+    struct expr_eq_apply : pegtl::if_must<padr<pegtl::string<CMP...>>, expr_ordering<void>> {};
 // todo: we cannot do anything here, right?
     template<typename CTX>
-    struct expr_equality : non_assoc<expr_ordering<CTX>, operators_equality> {};
+    struct expr_equality : pegtl::seq<expr_ordering<CTX>, pegtl::sor<expr_eq_apply<'=', '='>, expr_eq_apply<'!', '='>, pegtl::success>> {};
 
 
     struct operator_and : padr<pegtl::two<'&'>> {};
@@ -781,7 +782,7 @@ namespace keyword {
         struct string : pegtl::nothing<Rules> {};
 
         //template<> struct string<short_string_escaped> : pegtl::unescape::unescape_c<short_string_escaped,
-        template<> struct string<short_string_escaped> : pegtl::unescape::unescape_c<short_string_escaped, '"', '$', '\\'> {};
+        template<> struct string<short_string_escaped> : pegtl::unescape::unescape_c<short_string_escaped, '"', '$', '\\', 'n'> {};
         template<> struct string<short_string_accepted> : pegtl::unescape::append_all {};
 
         template<> struct string<short_string_content> {
@@ -817,6 +818,7 @@ namespace keyword {
     template<> struct control::normal<expr_merge_apply> : pegtl::change_state<expr_merge_apply, state::binary_expression<ast::merge>, pegtl::normal> {};
     template<> struct control::normal<expr_or_apply> : pegtl::change_state<expr_or_apply, state::binary_expression<ast::or_>, pegtl::normal> {};
     template<> struct control::normal<expr_and_apply> : pegtl::change_state<expr_and_apply, state::binary_expression<ast::and_>, pegtl::normal> {};
+    template<char... CMP> struct control::normal<expr_eq_apply<CMP...>> : pegtl::change_state<expr_eq_apply<CMP...>, state::binary_expression<ast::binary_expression<CMP...>>, pegtl::normal> {};
     template<> struct control::normal<expr_impl_apply> : pegtl::change_state<expr_impl_apply, state::binary_expression<ast::impl>, pegtl::normal> {};
     template<> struct control::normal<variable_tail> : pegtl::change_state<variable_tail, state::binary_expression<ast::attrpath>, pegtl::normal> {};
     template<> struct control::normal<attrpath_apply> : pegtl::change_state<attrpath_apply, state::binary_expression<ast::attrpath>, pegtl::normal> {};
@@ -851,6 +853,7 @@ namespace keyword {
 
     template<> struct action<do_backtrack> {
         template<typename Input> static void apply(const Input& in, state::base& state) {
+//XXX assert state.value to find superfluous backtrackings
             state.value.reset();
         }
     };
@@ -858,6 +861,7 @@ namespace keyword {
     template<> struct action<number> {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
+            assert(!state.value);
             state.value = std::make_shared<ast::number>(std::stoll(in.string()));
         }
     };
@@ -865,6 +869,7 @@ namespace keyword {
     template<> struct action<name> {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
+            assert(!state.value);
             state.value = std::make_shared<ast::name>(in.string());
         }
     };
@@ -881,6 +886,7 @@ namespace keyword {
     template<> struct action<keyword::key_true> {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
+            assert(!state.value);
             state.value = std::make_shared<ast::boolean>(true);
         }
     };
@@ -923,12 +929,6 @@ namespace keyword {
         }
     };
 
-    template<typename x> struct action<statement<x>> {
-        template<typename Input> static void apply(const Input& in, state::base& state) {
-            std::cout << "action<statement<x>>";
-            //state.push_statement();
-        }
-    };
 
 
 //    template<> const std::string errors<expr_negate<number>>::error_message = "incomplete negate expression, expected number";
