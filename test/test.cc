@@ -91,7 +91,7 @@ void check(S&& str) {
 
 
 std::shared_ptr<nix::ast::base> boolean(bool v) { return std::make_shared<nix::ast::boolean>(v); }
-std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<nix::ast::string>(v); }
+std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<nix::ast::short_string>(std::vector<std::shared_ptr<nix::ast::base>>({std::make_shared<nix::ast::string_literal>(v)})); }
 std::shared_ptr<nix::ast::base> operator "" _s(const char* v, size_t len) { return string(std::string(v, len)); }
 std::shared_ptr<nix::ast::base> number(unsigned long long v) { return std::make_shared<nix::ast::number>(v); }
 std::shared_ptr<nix::ast::base> operator "" _n(unsigned long long v) { return number(v); }
@@ -146,11 +146,11 @@ TEST_CASE("boolean expression") {
 TEST_CASE("strings") {
     check("\"\""s);
     check("\"shortstring\""s);
-    check("\"shortstring with \\\" escape\""s);
+    check("\"shortstring with \\\" escape\""s, "\"shortstring with \" escape\""s);
     CHECK_AST("\"xyz\"", string("xyz"));
 //    check("\"shortstring with dollarcurly ${true}\""s);
 //    check("\"shortstring with dollarcurlys ${true}${true}\""s);
-//    check("\"shortstring with dollarcurly ${\"with inner string\"}\""s);
+    check("\"shortstring with dollarcurly ${\"with inner string\"}\""s);
 //    check("\"shortstring with nested dollarcurly ${\"[outer,${\"<inner>\"}]\"}\""s);
     check("''''"s, "\"\""s);
     check("''longstring''"s, "\"longstring\""s);

@@ -56,11 +56,18 @@ namespace ast {
         unsigned long long data;
     };
 
-    struct string : public base {
-        explicit string(std::string in_data) : base(), data(in_data) {};
-        virtual void stream(std::ostream& o) const override { o << "\"" << data << "\""; }
-        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const string*>(o); return cast && data == cast->data; }
+    struct string_literal : public base {
+        explicit string_literal(std::string in_data) : base(), data(in_data) {};
+        virtual void stream(std::ostream& o) const override { o << data; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const string_literal*>(o); return cast && data == cast->data; }
         std::string data;
+    };
+
+    struct short_string : public base {
+        explicit short_string(const std::vector<std::shared_ptr<ast::base>> parts) : base(), parts(parts) {};
+        virtual void stream(std::ostream& o) const override { o << "\""; for (const auto& i : parts) o << *i; o << "\""; }
+        virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const short_string*>(o); return cast && parts == cast->parts; }
+        const std::vector<std::shared_ptr<ast::base>> parts;
     };
 
     struct name : public base {
@@ -95,6 +102,11 @@ namespace ast {
     struct not_ : public unary_expression<'!'> { using unary_expression<'!'>::unary_expression; };
 
     struct negate : public unary_expression<'-'> { using unary_expression<'-'>::unary_expression; };
+
+    struct dollar_curly : public unary_expression<'$'> {
+        using unary_expression<'$'>::unary_expression;
+        virtual void stream(std::ostream& o) const override { o << "${" << value << "}"; }
+    };
 
     template<char... op>
     struct binary_expression : public base {
@@ -215,6 +227,36 @@ namespace state {
         }
     };
 
+    struct string : base {
+        std::vector<std::shared_ptr<ast::base>> data;
+        std::string unescaped;
+
+        void push_back() {
+            std::cout << "state::string::push_back" <<std::endl;
+            std::cout << "value: " << value << std::endl;
+            //assert(unescaped);
+            assert(!value);
+            data.push_back(std::make_shared<ast::string_literal>(std::move(unescaped)));
+            unescaped = std::string();
+        }
+
+        void push_back_expr() {
+            if (unescaped.length()) {
+                data.push_back(std::make_shared<ast::string_literal>(std::move(unescaped)));
+                unescaped = std::string();
+            }
+            assert(value);
+            data.push_back(std::make_shared<ast::dollar_curly>(std::move(value)));
+        }
+
+        void success(base& in_result) {
+            std::cout << "state::string::success" << data.size() << std::endl;
+            assert(!value);
+            assert(!in_result.value);
+            in_result.value = std::make_shared<ast::short_string>(std::move(data));
+        }
+    };
+
     template<typename T>
     struct binary_expression : base {
         void success(base& in_result) {
@@ -327,9 +369,11 @@ struct string;
 
 struct dollarcurly_expr;
 
-struct short_string_escaped : pegtl::seq<pegtl::one<'\\'>, pegtl::one<'"', '$', '\\'>> {};
-struct short_string_content : pegtl::star<pegtl::sor<short_string_escaped, dollarcurly_expr, pegtl::not_one<'"'>>> {};
-struct short_string : pegtl::if_must<pegtl::one<'"'>, short_string_content, pegtl::one<'"'>> {};
+struct short_string_escaped : pegtl::one<'"', '$', '\\'> {};
+struct short_string_accepted : pegtl::any {};
+struct short_string_character : pegtl::if_must_else<pegtl::one<'\\'>, short_string_escaped, short_string_accepted> {};
+struct short_string_content : pegtl::until<pegtl::one<'"'>, pegtl::sor<dollarcurly_expr, short_string_character>> {};
+struct short_string : pegtl::if_must<pegtl::one<'"'>, short_string_content> {};
 // XXX: add prefix stripping
 struct long_string_escaped : pegtl::seq<pegtl::two<'\''>, pegtl::sor<pegtl::one<'\''>, pegtl::one<'$'>, pegtl::seq<pegtl::one<'\\'>, pegtl::one<'n', 'r', 't'>>>> {};
 struct long_string_content : pegtl::star<pegtl::sor<long_string_escaped, dollarcurly_expr, pegtl::seq<pegtl::not_at<pegtl::two<'\''>>, pegtl::any>>> {};
@@ -675,6 +719,27 @@ namespace keyword {
                 state.set_then();
             }
         };
+
+
+        template<typename Rules>
+        struct string : pegtl::nothing<Rules> {};
+
+        //template<> struct string<short_string_escaped> : pegtl::unescape::unescape_c<short_string_escaped,
+        template<> struct string<short_string_escaped> : pegtl::unescape::unescape_c<short_string_escaped, '"', '$', '\\'> {};
+        template<> struct string<short_string_accepted> : pegtl::unescape::append_all {};
+
+        template<> struct string<short_string_content> {
+            template<typename Input> static void apply(const Input& in, state::string& state) {
+                state.push_back();
+            }
+        };
+
+        template<> struct string<dollarcurly_expr> {
+            template<typename Input> static void apply(const Input& in, state::string& state) {
+                state.push_back_expr();
+            }
+        };
+
     } // namespace actions
 
 
@@ -697,6 +762,7 @@ namespace keyword {
     template<typename x> struct control::normal<let_apply<x>> : pegtl::change_state<let_apply<x>, state::binary_expression<ast::let> , pegtl::tracer> {};
     template<typename x> struct control::normal<function_apply<x>> : pegtl::change_state<function_apply<x>, state::binary_expression<ast::function> , pegtl::tracer> {};
     template<typename x> struct control::normal<expr_if_apply<x>> : pegtl::change_state_and_action<expr_if_apply<x>, state::if_then_else, actions::if_then_else, pegtl::tracer> {};
+    template<> struct control::normal<short_string_content> : pegtl::change_state_and_action<short_string_content, state::string, actions::string, pegtl::tracer> {};
     template<typename x> struct control::normal<backtrack<x>> : pegtl::tracer<backtrack<x>> {};
 
 
@@ -730,13 +796,6 @@ namespace keyword {
         }
     };
 
-    template<> struct action<short_string_content> {
-        template<typename Input>
-        static void apply(const Input& in, state::base& state) {
-            //xxx: can we move here?
-            state.value = std::make_shared<ast::string>(in.string());
-        }
-    };
 
     template<> struct action<long_string_content> {
         template<typename Input>
