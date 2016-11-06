@@ -279,7 +279,6 @@ namespace state {
 
     struct string : any_string {
         void success(base& in_result) {
-            std::cout << "state::string::success" << data.size() << std::endl;
             assert(!value);
             assert(!in_result.value);
             in_result.value = std::make_shared<ast::short_string>(std::move(data));
@@ -371,7 +370,6 @@ namespace state {
         void push_back() {
             assert(value);
             //assert(std::dynamic_pointer_cast<ast::formal>(value));
-            std::cout << "pushing " << value << std::endl;
             data.push_back(std::move(value));
         }
 
@@ -540,6 +538,7 @@ namespace keyword {
 
     //struct bind_eq_attrpath : attrpath {};
     struct bind_eq_operator : padr<pegtl::one<'='>> {};
+//XXX shortcut here?
     struct bind_eq_apply : pegtl::seq<expression<>, padr<pegtl::one<';'>>> {};
     struct bind_eq : pegtl::seq<padr<attrpath>, pegtl::if_must<bind_eq_operator, bind_eq_apply>> {};
     struct bind_inherit_attrname : attrpath {};
@@ -562,14 +561,17 @@ namespace keyword {
 
 
 
-    struct expr_applying_tail;
-
-    struct variable_tail_or : pegtl::if_must<keyword::key_or, expr_applying_tail> {};
-    struct variable_tail : pegtl::seq<pegtl::sor<name, string, dollarcurly_expr>, seps, pegtl::opt<variable_tail_or>> {};
+    struct variable_tail;
 
     struct expr_select : pegtl::seq<pegtl::sor<table, bracket_expr, name>, seps, pegtl::star<pegtl::seq<padr<pegtl::one<'.'>>, variable_tail>>> {};
     struct expr_simple : pegtl::sor<boolean, number, string, array, dollarcurly_expr, spath, path, uri> {};
     struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select> {};
+
+    struct variable_tail_or_apply : expr_applying_tail {};
+    struct variable_tail_or : pegtl::if_must<keyword::key_or, variable_tail_or_apply> {};
+    struct variable_tail : pegtl::seq<pegtl::sor<name, string, dollarcurly_expr>, seps, pegtl::opt<variable_tail_or>> {};
+
+
 // XXX reorder, this should be a few lines above near other array stuff
     struct array_content_apply : expr_applying_tail {};
     struct expr_applying : pegtl::seq<expr_select, pegtl::star<pegtl::not_at<pegtl::one<';', ','>>, expr_applying_tail>> {};
@@ -809,7 +811,7 @@ namespace keyword {
     } // namespace actions
 
 
-    template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::base, action, pegtl::tracer> {};
+    template<typename x> struct control::normal<expression<x>> : pegtl::change_state_and_action<expression<x>, state::base, action, pegtl::normal> {};
     template<> struct control::normal<expr_add_apply> : pegtl::change_state<expr_add_apply, state::binary_expression<ast::add>, pegtl::normal> {};
     template<> struct control::normal<expr_sub_apply> : pegtl::change_state<expr_sub_apply, state::binary_expression<ast::sub>, pegtl::normal> {};
     template<> struct control::normal<expr_mul_apply> : pegtl::change_state<expr_mul_apply, state::binary_expression<ast::mul>, pegtl::normal> {};
@@ -824,21 +826,21 @@ namespace keyword {
     template<> struct control::normal<attrpath_apply> : pegtl::change_state<attrpath_apply, state::binary_expression<ast::attrpath>, pegtl::normal> {};
     template<> struct control::normal<expr_attrtest_apply> : pegtl::change_state<expr_attrtest_apply, state::binary_expression<ast::attrtest>, pegtl::normal> {};
     template<> struct control::normal<array_content> : pegtl::change_state_and_action<array_content, state::array, actions::array, pegtl::normal> {};
-    template<> struct control::normal<bind_eq_apply> : pegtl::change_state<bind_eq_apply, state::binary_expression<ast::binding_eq>, pegtl::tracer> {};
-    template<> struct control::normal<bind_inherit_apply> : pegtl::change_state<bind_inherit_apply, state::binding_inherit, pegtl::tracer> {};
-    template<> struct control::normal<expr_applying_tail> : pegtl::change_state<expr_applying_tail, state::binary_expression<ast::call>, pegtl::tracer> {};
-    template<> struct control::normal<variable_tail_or> : pegtl::change_state<variable_tail_or, state::binary_expression<ast::set_or>, pegtl::tracer> {};
-    template<> struct control::normal<formal_apply> : pegtl::change_state_and_action<formal_apply, state::binary_expression<ast::formal>, action, pegtl::tracer> {};
-    template<> struct control::normal<formals> : pegtl::change_state_and_action<formals, state::formals, actions::formals, pegtl::tracer> {};
-    template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::tracer> {};
+    template<> struct control::normal<bind_eq_apply> : pegtl::change_state<bind_eq_apply, state::binary_expression<ast::binding_eq>, pegtl::normal> {};
+    template<> struct control::normal<bind_inherit_apply> : pegtl::change_state<bind_inherit_apply, state::binding_inherit, pegtl::normal> {};
+    template<> struct control::normal<expr_applying_tail> : pegtl::change_state<expr_applying_tail, state::binary_expression<ast::call>, pegtl::normal> {};
+    template<> struct control::normal<variable_tail_or_apply> : pegtl::change_state<variable_tail_or_apply, state::binary_expression<ast::set_or>, pegtl::normal> {};
+    template<> struct control::normal<formal_apply> : pegtl::change_state_and_action<formal_apply, state::binary_expression<ast::formal>, action, pegtl::normal> {};
+    template<> struct control::normal<formals> : pegtl::change_state_and_action<formals, state::formals, actions::formals, pegtl::normal> {};
+    template<typename x> struct control::normal<binds<x>> : pegtl::change_state_and_action<binds<x>, state::binds, actions::binds, pegtl::normal> {};
     template<typename x> struct control::normal<assert_apply<x>> : pegtl::change_state<assert_apply<x>, state::binary_expression<ast::assertion>, pegtl::normal> {};
     template<typename x> struct control::normal<with_apply<x>> : pegtl::change_state<with_apply<x>, state::binary_expression<ast::with>, pegtl::normal> {};
-    template<typename x> struct control::normal<let_apply<x>> : pegtl::change_state<let_apply<x>, state::binary_expression<ast::let> , pegtl::tracer> {};
-    template<typename x> struct control::normal<function_apply<x>> : pegtl::change_state<function_apply<x>, state::binary_expression<ast::function> , pegtl::tracer> {};
-    template<typename x> struct control::normal<expr_if_apply<x>> : pegtl::change_state_and_action<expr_if_apply<x>, state::if_then_else, actions::if_then_else, pegtl::tracer> {};
-    template<> struct control::normal<short_string_content> : pegtl::change_state_and_action<short_string_content, state::string, actions::string, pegtl::tracer> {};
-    template<> struct control::normal<long_string_content> : pegtl::change_state_and_action<long_string_content, state::long_string, actions::string, pegtl::tracer> {};
-    template<typename x> struct control::normal<backtrack<x>> : pegtl::tracer<backtrack<x>> {};
+    template<typename x> struct control::normal<let_apply<x>> : pegtl::change_state<let_apply<x>, state::binary_expression<ast::let> , pegtl::normal> {};
+    template<typename x> struct control::normal<function_apply<x>> : pegtl::change_state<function_apply<x>, state::binary_expression<ast::function> , pegtl::normal> {};
+    template<typename x> struct control::normal<expr_if_apply<x>> : pegtl::change_state_and_action<expr_if_apply<x>, state::if_then_else, actions::if_then_else, pegtl::normal> {};
+    template<> struct control::normal<short_string_content> : pegtl::change_state_and_action<short_string_content, state::string, actions::string, pegtl::normal> {};
+    template<> struct control::normal<long_string_content> : pegtl::change_state_and_action<long_string_content, state::long_string, actions::string, pegtl::normal> {};
+//    template<typename x> struct control::normal<backtrack<x>> : pegtl::normal<backtrack<x>> {};
 
 
 
