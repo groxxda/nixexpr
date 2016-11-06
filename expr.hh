@@ -31,9 +31,9 @@ namespace ast {
             o.stream(msg);
             throw msg.str();
         }
+        virtual ~base() = default;
     protected:
         explicit base() {}
-        ~base() {}
     };
 
     inline std::ostream& operator<<(std::ostream& o, const base& b) {
@@ -45,59 +45,63 @@ namespace ast {
         return b ? (o << *b) : (o << "NULL");
     }
 
+    inline std::ostream& operator<<(std::ostream& o, const std::unique_ptr<base>& b) {
+        return b ? (o << *b) : (o << "NULL");
+    }
+
     inline bool operator==(const std::shared_ptr<base>& a, const std::shared_ptr<base>& b) {
         return a->operator==(b.get());
     }
 
     struct number : public base {
-        explicit number(const long long in_data) : base(), data(in_data) {};
+        explicit number(const unsigned long long in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << data; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const number*>(o); return cast && data == cast->data; }
-        unsigned long long data;
+        const unsigned long long data;
     };
 
     struct string_literal : public base {
-        explicit string_literal(std::string in_data) : base(), data(in_data) {};
+        explicit string_literal(std::string&& in_data) : base(), data(std::move(in_data)) {};
         virtual void stream(std::ostream& o) const override { o << data; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const string_literal*>(o); return cast && data == cast->data; }
-        std::string data;
+        const std::string data;
     };
 
     struct short_string : public base {
-        explicit short_string(const std::vector<std::shared_ptr<ast::base>> parts) : base(), parts(parts) {};
+        explicit short_string(std::vector<std::unique_ptr<ast::base>>&& parts) : base(), parts(std::move(parts)) {};
         virtual void stream(std::ostream& o) const override { o << "\""; for (const auto& i : parts) o << *i; o << "\""; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const short_string*>(o); return cast && parts == cast->parts; }
-        const std::vector<std::shared_ptr<ast::base>> parts;
+        const std::vector<std::unique_ptr<ast::base>> parts;
     };
 
     struct long_string : public base {
-        explicit long_string(const std::vector<std::shared_ptr<ast::base>> parts, const unsigned int prefixlen) : base(), parts(parts), prefixlen(prefixlen) {}
+        explicit long_string(std::vector<std::unique_ptr<ast::base>>&& parts, const unsigned int prefixlen) : base(), parts(std::move(parts)), prefixlen(prefixlen) {}
         virtual void stream(std::ostream& o) const override { o << "''"; for (const auto& i : parts) o << *i; o << "''"; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const long_string*>(o); return cast && parts == cast->parts; }
-        const std::vector<std::shared_ptr<ast::base>> parts;
+        const std::vector<std::unique_ptr<ast::base>> parts;
         const unsigned int prefixlen;
     };
 
     struct name : public base {
-        explicit name(std::string in_data) : base(), data(in_data) {};
+        explicit name(const std::string&& in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << data; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const name*>(o); return cast && data == cast->data; }
-        std::string data;
+        const std::string data;
     };
 
     struct path : public base {
-        explicit path(std::string in_data) : base(), data(in_data) {};
+        explicit path(const std::string&& in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << data; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const name*>(o); return cast && data == cast->data; }
-        std::string data;
+        const std::string data;
     };
 
     struct boolean : public base {
-        explicit boolean(bool in_data) : base(), data(in_data) {};
+        explicit boolean(const bool in_data) : base(), data(in_data) {};
         virtual void stream(std::ostream& o) const override { o << std::boolalpha << data; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const boolean*>(o); return cast && data == cast->data; }
         operator bool() { return data; }
-        bool data;
+        const bool data;
     };
 
     struct ellipsis : public base {
@@ -108,10 +112,10 @@ namespace ast {
 
     template<char op>
     struct unary_expression : public base {
-        explicit unary_expression(std::shared_ptr<base> value) : base(), value(value) {}
+        explicit unary_expression(std::unique_ptr<base>&& value) : base(), value(std::move(value)) {}
         virtual void stream(std::ostream& o) const override { o << op << value; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const unary_expression<op>*>(o); return cast && value == cast->value; }
-        std::shared_ptr<base> value;
+        const std::unique_ptr<base> value;
     };
 
     struct not_ : public unary_expression<'!'> { using unary_expression<'!'>::unary_expression; };
@@ -125,11 +129,11 @@ namespace ast {
 
     template<char... op>
     struct binary_expression : public base {
-        explicit binary_expression(std::shared_ptr<base> lhs, std::shared_ptr<base> rhs) : base(), lhs(lhs), rhs(rhs) {}
+        explicit binary_expression(std::unique_ptr<base>&& lhs, std::unique_ptr<base>&& rhs) : base(), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
         virtual void stream(std::ostream& o) const override { o << "(" << lhs; (o << ... << op) << rhs << ")"; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const binary_expression<op...>*>(o); return cast && lhs == cast->lhs && rhs == cast->rhs; }
-        std::shared_ptr<base> lhs;
-        std::shared_ptr<base> rhs;
+        const std::unique_ptr<base> lhs;
+        const std::unique_ptr<base> rhs;
     };
 
     struct add : public binary_expression<'+'> { using binary_expression<'+'>::binary_expression; };
@@ -165,22 +169,22 @@ namespace ast {
     };
 
     struct binding_inherit : public base {
-        explicit binding_inherit(const std::shared_ptr<ast::base> from, const std::vector<std::shared_ptr<ast::base>> attrs) : base(), from(from), attrs(attrs) {};
+        explicit binding_inherit(std::unique_ptr<ast::base>&& from, std::vector<std::unique_ptr<ast::base>>&& attrs) : base(), from(std::move(from)), attrs(std::move(attrs)) {};
         virtual void stream(std::ostream& o) const override {
             o << "inherit";
             if (from) { o << " (" << from << ")"; }
             for (const auto& i : attrs) o << " " << *i;
         }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const binding_inherit*>(o); return cast && from == cast->from && attrs == cast->attrs; }
-        const std::shared_ptr<ast::base> from;
-        const std::vector<std::shared_ptr<ast::base>> attrs;
+        const std::unique_ptr<ast::base> from;
+        const std::vector<std::unique_ptr<ast::base>> attrs;
     };
 
     struct binds : public base {
-        explicit binds(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) {};
+        explicit binds(std::vector<std::unique_ptr<ast::base>>&& data) : base(), data(std::move(data)) {};
         virtual void stream(std::ostream& o) const override { for (const auto& i : data) o << i << "; "; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const binds*>(o); return cast && data == cast->data; }
-        const std::vector<std::shared_ptr<ast::base>> data;
+        const std::vector<std::unique_ptr<ast::base>> data;
     };
 
     struct formal : public binary_expression<'?'> {
@@ -189,25 +193,25 @@ namespace ast {
     };
 
     struct formals : public base {
-        explicit formals(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) {}
+        explicit formals(std::vector<std::unique_ptr<ast::base>>&& data) : base(), data(std::move(data)) {}
         virtual void stream(std::ostream& o) const override { o << "{"; auto i = data.cbegin(); if (i != data.cend()) o << " " << *i++; while (i != data.cend()) o << ", " << *i++; o << " }"; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const formals*>(o); return cast && data == cast->data; }
-        const std::vector<std::shared_ptr<ast::base>> data;
+        const std::vector<std::unique_ptr<ast::base>> data;
     };
 
     struct table : public base {
-        explicit table(const std::shared_ptr<ast::base> data, bool recursive) : binds(data), recursive(recursive) {}
+        explicit table(std::unique_ptr<ast::base>&& data, bool recursive) : binds(std::move(data)), recursive(recursive) {}
         virtual void stream(std::ostream& o) const override { if (recursive) o << "rec "; o << "{ " << binds << "}"; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const table*>(o); return cast && recursive == cast->recursive && binds == cast->binds; }
-        const std::shared_ptr<ast::base> binds;
+        const std::unique_ptr<ast::base> binds;
         const bool recursive;
     };
 
     struct array : public base {
-        explicit array(const std::vector<std::shared_ptr<ast::base>> data) : base(), data(data) { };
+        explicit array(std::vector<std::unique_ptr<ast::base>>&& data) : base(), data(std::move(data)) { };
         virtual void stream(std::ostream& o) const override { o << "[ "; for (const auto& i : data) o << *i << " "; o << "]"; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const array*>(o); return cast && data == cast->data; }
-        const std::vector<std::shared_ptr<ast::base>> data;
+        const std::vector<std::unique_ptr<ast::base>> data;
     };
 
     struct let : public binary_expression<'l', 'e', 't'> {
@@ -231,12 +235,12 @@ namespace ast {
     };
 
     struct if_then_else : public base {
-        explicit if_then_else(const std::shared_ptr<ast::base> test, const std::shared_ptr<ast::base> then_expr, const std::shared_ptr<ast::base> else_expr) : base(), test(test), then_expr(then_expr), else_expr(else_expr) {}
+        explicit if_then_else(std::unique_ptr<ast::base>&& test, std::unique_ptr<ast::base>&& then_expr, std::unique_ptr<ast::base>&& else_expr) : base(), test(std::move(test)), then_expr(std::move(then_expr)), else_expr(std::move(else_expr)) {}
         virtual void stream(std::ostream& o) const override { o << "if " << test << " then " << then_expr << " else " << else_expr; }
         virtual bool operator==(const base* o) const override { auto cast = dynamic_cast<const if_then_else*>(o); return cast && test == cast->test && then_expr == cast->then_expr && else_expr == cast->else_expr; }
-        const std::shared_ptr<ast::base> test;
-        const std::shared_ptr<ast::base> then_expr;
-        const std::shared_ptr<ast::base> else_expr;
+        const std::unique_ptr<ast::base> test;
+        const std::unique_ptr<ast::base> then_expr;
+        const std::unique_ptr<ast::base> else_expr;
     };
 } // namespace ast
 
@@ -248,7 +252,7 @@ namespace state {
         base() = default;
         base(const base&) = delete;
         void operator=(const base&) = delete;
-        std::shared_ptr<ast::base> value;
+        std::unique_ptr<ast::base> value;
         void success(base& in_result) {
             assert(!in_result.value);
             assert(value);
@@ -257,22 +261,22 @@ namespace state {
     };
 
     struct any_string : base {
-        std::vector<std::shared_ptr<ast::base>> data;
+        std::vector<std::unique_ptr<ast::base>> data;
         std::string unescaped;
 
         void push_back() {
             assert(!value);
-            data.push_back(std::make_shared<ast::string_literal>(std::move(unescaped)));
+            data.push_back(std::make_unique<ast::string_literal>(std::move(unescaped)));
             unescaped = std::string();
         }
 
         void push_back_expr() {
             if (unescaped.length()) {
-                data.push_back(std::make_shared<ast::string_literal>(std::move(unescaped)));
+                data.push_back(std::make_unique<ast::string_literal>(std::move(unescaped)));
                 unescaped = std::string();
             }
             assert(value);
-            data.push_back(std::make_shared<ast::dollar_curly>(std::move(value)));
+            data.push_back(std::make_unique<ast::dollar_curly>(std::move(value)));
         }
 
     };
@@ -281,7 +285,7 @@ namespace state {
         void success(base& in_result) {
             assert(!value);
             assert(!in_result.value);
-            in_result.value = std::make_shared<ast::short_string>(std::move(data));
+            in_result.value = std::make_unique<ast::short_string>(std::move(data));
         }
     };
 
@@ -293,7 +297,7 @@ namespace state {
         void success(base& in_result) {
             assert(!value);
             assert(!in_result.value);
-            in_result.value = std::make_shared<ast::long_string>(std::move(data), prefix_len);
+            in_result.value = std::make_unique<ast::long_string>(std::move(data), prefix_len);
         }
     };
 
@@ -302,13 +306,13 @@ namespace state {
         void success(base& in_result) {
             assert(in_result.value);
             assert(value);
-            in_result.value = std::make_shared<T>(std::move(in_result.value), std::move(value));
+            in_result.value = std::make_unique<T>(std::move(in_result.value), std::move(value));
         }
     };
 
     struct if_then_else : base {
-        std::shared_ptr<ast::base> test;
-        std::shared_ptr<ast::base> then_expr;
+        std::unique_ptr<ast::base> test;
+        std::unique_ptr<ast::base> then_expr;
 
         void set_test() {
             assert(value);
@@ -323,13 +327,13 @@ namespace state {
         void success(base& in_result) {
             assert(!in_result.value);
             assert(value);
-            in_result.value = std::make_shared<ast::if_then_else>(std::move(test), std::move(then_expr), std::move(value));
+            in_result.value = std::make_unique<ast::if_then_else>(std::move(test), std::move(then_expr), std::move(value));
         }
     };
 
     struct binding_inherit : base {
-        std::shared_ptr<ast::base> from;
-        std::vector<std::shared_ptr<ast::base>> attrs;
+        std::unique_ptr<ast::base> from;
+        std::vector<std::unique_ptr<ast::base>> attrs;
 
         void set_from() {
             assert(value);
@@ -344,28 +348,28 @@ namespace state {
         void success(base& in_result) {
             assert(!in_result.value);
             assert(!value);
-            in_result.value = std::make_shared<ast::binding_inherit>(from, attrs);
+            in_result.value = std::make_unique<ast::binding_inherit>(std::move(from), std::move(attrs));
         }
     };
 
     struct binds : base {
-        std::vector<std::shared_ptr<ast::base>> data;
+        std::vector<std::unique_ptr<ast::base>> data;
 
         void push_back() {
             assert(value);
-            assert(std::dynamic_pointer_cast<ast::binding_eq>(value) || std::dynamic_pointer_cast<ast::binding_inherit>(value));
+            assert(dynamic_cast<ast::binding_eq>(*value) || dynamic_cast<ast::binding_inherit>(*value));
             data.push_back(std::move(value));
         }
 
         void success(base& in_result) {
             assert(!value);
             assert(!in_result.value);
-            in_result.value = std::make_shared<ast::binds>(std::move(data));
+            in_result.value = std::make_unique<ast::binds>(std::move(data));
         }
     };
 
     struct formals : base {
-        std::vector<std::shared_ptr<ast::base>> data;
+        std::vector<std::unique_ptr<ast::base>> data;
 
         void push_back() {
             assert(value);
@@ -376,12 +380,12 @@ namespace state {
         void success(base& in_result) {
             assert(!value);
             assert(!in_result.value);
-            in_result.value = std::make_shared<ast::formals>(std::move(data));
+            in_result.value = std::make_unique<ast::formals>(std::move(data));
         }
     };
 
     struct array : base {
-        std::vector<std::shared_ptr<ast::base>> data;
+        std::vector<std::unique_ptr<ast::base>> data;
 
         void push_back() {
             assert(value);
@@ -391,7 +395,7 @@ namespace state {
         void success(base& in_result) {
             assert(!in_result.value);
             assert(!value);
-            in_result.value = std::make_shared<ast::array>(std::move(data));
+            in_result.value = std::make_unique<ast::array>(std::move(data));
         }
     };
 } // namespace state
@@ -753,7 +757,7 @@ namespace keyword {
 
         template<> struct formals<keyword::key_ellipsis> {
             template<typename Input> static void apply(const Input& in, state::formals& state) {
-                state.value = std::make_shared<ast::ellipsis>();
+                state.value = std::make_unique<ast::ellipsis>();
                 state.push_back();
             }
         };
@@ -864,7 +868,7 @@ namespace keyword {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
             assert(!state.value);
-            state.value = std::make_shared<ast::number>(std::stoll(in.string()));
+            state.value = std::make_unique<ast::number>(std::stoll(in.string()));
         }
     };
 
@@ -872,7 +876,7 @@ namespace keyword {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
             assert(!state.value);
-            state.value = std::make_shared<ast::name>(in.string());
+            state.value = std::make_unique<ast::name>(in.string());
         }
     };
 
@@ -880,7 +884,7 @@ namespace keyword {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
             assert(!state.value);
-            state.value = std::make_shared<ast::path>(in.string());
+            state.value = std::make_unique<ast::path>(in.string());
         }
     };
 
@@ -889,7 +893,7 @@ namespace keyword {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
             assert(!state.value);
-            state.value = std::make_shared<ast::boolean>(true);
+            state.value = std::make_unique<ast::boolean>(true);
         }
     };
 
@@ -897,7 +901,7 @@ namespace keyword {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
             assert(!state.value);
-            state.value = std::make_shared<ast::boolean>(false);
+            state.value = std::make_unique<ast::boolean>(false);
         }
     };
 
@@ -905,7 +909,7 @@ namespace keyword {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
             assert(state.value);
-            state.value = std::make_shared<ast::not_>(std::move(state.value));
+            state.value = std::make_unique<ast::not_>(std::move(state.value));
         }
     };
 
@@ -913,21 +917,21 @@ namespace keyword {
         template<typename Input>
         static void apply(const Input& in, state::base& state) {
             assert(state.value);
-            state.value = std::make_shared<ast::negate>(std::move(state.value));
+            state.value = std::make_unique<ast::negate>(std::move(state.value));
         }
     };
 
     template<> struct action<table_apply<table_begin_nonrecursive>> {
         template<typename Input> static void apply(const Input& in, state::base& state) {
             assert(state.value);
-            state.value = std::make_shared<ast::table>(std::move(state.value), false);
+            state.value = std::make_unique<ast::table>(std::move(state.value), false);
         }
     };
 
     template<> struct action<table_apply<table_begin_recursive>> {
         template<typename Input> static void apply(const Input& in, state::base& state) {
             assert(state.value);
-            state.value = std::make_shared<ast::table>(std::move(state.value), true);
+            state.value = std::make_unique<ast::table>(std::move(state.value), true);
         }
     };
 
