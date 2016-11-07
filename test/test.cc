@@ -6,15 +6,18 @@
  */
 #include "catch.hpp"
 
+#include "expr.hh"
 #include <iostream>
 #include <pegtl/analyze.hh>
-#include "expr.hh"
 
 using namespace std::literals;
 
 template <typename Str, typename... Args>
 bool parse_nocatch(Str&& str, Args&&... args) {
-    auto res = pegtl::parse_string<nix::parser::grammar, nix::parser::action, nix::parser::control::normal>(std::forward<Str>(str), std::forward<Str>(str), std::forward<Args>(args)...);
+    auto res = pegtl::parse_string<nix::parser::grammar, nix::parser::action,
+                                   nix::parser::control::normal>(
+        std::forward<Str>(str), std::forward<Str>(str),
+        std::forward<Args>(args)...);
     return res;
 }
 
@@ -23,17 +26,17 @@ bool parse(Str&& str, Args&&... args) {
     try {
         auto res = parse_nocatch(str, args...);
         return res;
-    } catch (pegtl::parse_error& e) {
+    } catch(pegtl::parse_error& e) {
         std::cerr << "Error parsing " << str << ":" << std::endl;
         std::cerr << e.what() << std::endl;
         return false;
-    } catch (...) {
+    } catch(...) {
         std::cerr << "unknown error parsing " << str << ":" << std::endl;
         return false;
     }
 }
 
-template<typename R>
+template <typename R>
 R compare(nix::parser::state::base& state) {
     std::stringstream s;
     s << state.value;
@@ -42,23 +45,22 @@ R compare(nix::parser::state::base& state) {
     return r;
 }
 
-template<>
+template <>
 std::string compare(nix::parser::state::base& state) {
     std::stringstream s;
     s << state.value;
     return s.str();
 }
 
-template<typename R, typename A>
+template <typename R, typename A>
 R compare_downcast(nix::parser::state::base& state) {
-
     auto downcast = std::dynamic_pointer_cast<A>(state.value);
-    if (!downcast) {
+    if(!downcast) {
         auto val = state.value;
         std::stringstream msg("expected ");
         msg << typeid(A).name();
         msg << ", but got type=";
-        if (val) {
+        if(val) {
             auto& val_ = *val;
             msg << typeid(val_).name();
         } else
@@ -70,11 +72,17 @@ R compare_downcast(nix::parser::state::base& state) {
     return downcast->data;
 }
 
-template<> int compare(nix::parser::state::base& state) { return compare_downcast<int, nix::ast::number>(state); }
+template <>
+int compare(nix::parser::state::base& state) {
+    return compare_downcast<int, nix::ast::number>(state);
+}
 
-template<> bool compare(nix::parser::state::base& state) { return compare_downcast<bool, nix::ast::boolean>(state); }
+template <>
+bool compare(nix::parser::state::base& state) {
+    return compare_downcast<bool, nix::ast::boolean>(state);
+}
 
-template<typename S, typename R>
+template <typename S, typename R>
 void check(S&& str, const R& expect) {
     SECTION(str) {
         nix::parser::state::base result;
@@ -83,45 +91,133 @@ void check(S&& str, const R& expect) {
     }
 }
 
-template<typename S>
+template <typename S>
 void check(S&& str) {
     check<>(str, str);
 }
 
-#define CHECK_AST(expr, ast) SECTION(expr) { nix::parser::state::base result; REQUIRE(parse(expr, result)); REQUIRE(ast == result.value); }
+#define CHECK_AST(expr, ast)                                                   \
+    SECTION(expr) {                                                            \
+        nix::parser::state::base result;                                       \
+        REQUIRE(parse(expr, result));                                          \
+        REQUIRE(ast == result.value);                                          \
+    }
 
-
-
-
-std::shared_ptr<nix::ast::base> boolean(bool v) { return std::make_shared<nix::ast::boolean>(v); }
-std::shared_ptr<nix::ast::base> string(std::string v) { return std::make_shared<nix::ast::short_string>(std::vector<std::shared_ptr<nix::ast::base>>({std::make_shared<nix::ast::string_literal>(v)})); }
-std::shared_ptr<nix::ast::base> long_string(std::string v, unsigned long len) { return std::make_shared<nix::ast::long_string>(std::vector<std::shared_ptr<nix::ast::base>>({std::make_shared<nix::ast::string_literal>(v)}), len); }
-std::shared_ptr<nix::ast::base> operator "" _s(const char* v, size_t len) { return string(std::string(v, len)); }
-std::shared_ptr<nix::ast::base> number(unsigned long long v) { return std::make_shared<nix::ast::number>(v); }
-std::shared_ptr<nix::ast::base> operator "" _n(unsigned long long v) { return number(v); }
-std::shared_ptr<nix::ast::base> name(std::string v) { return std::make_shared<nix::ast::name>(v); }
-std::shared_ptr<nix::ast::base> operator "" _n(const char* v, size_t len) { return name(std::string(v, len)); }
-std::shared_ptr<nix::ast::base> not_(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::not_>(v); }
-std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) { return std::make_shared<nix::ast::negate>(v); }
-std::shared_ptr<nix::ast::base> add(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::add>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> sub(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::sub>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> mul(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::mul>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::div>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> concat(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::concat>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> merge(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::merge>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> attrtest(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::attrtest>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> attrpath(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::attrpath>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::or_>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::and_>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs, std::shared_ptr<nix::ast::base> rhs) { return std::make_shared<nix::ast::impl>(lhs, rhs); }
-std::shared_ptr<nix::ast::base> assertion(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::assertion>(what, expr); }
-std::shared_ptr<nix::ast::base> with(std::shared_ptr<nix::ast::base> what, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::with>(what, expr); }
-std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::base> arg, std::shared_ptr<nix::ast::base> expr) { return std::make_shared<nix::ast::function>(arg, expr); }
-std::shared_ptr<nix::ast::base> bind(std::shared_ptr<nix::ast::base> name, std::shared_ptr<nix::ast::base> value) { return std::make_shared<nix::ast::binding_eq>(name, value); }
-std::shared_ptr<nix::ast::base> array(std::initializer_list<std::shared_ptr<nix::ast::base>> values) { return std::make_shared<nix::ast::array>(std::vector<std::shared_ptr<nix::ast::base>>(values)); }
-std::shared_ptr<nix::ast::base> table(std::initializer_list<std::shared_ptr<nix::ast::base>> binds, bool recursive = false) { return std::make_shared<nix::ast::table>(std::make_shared<nix::ast::binds>(std::vector<std::shared_ptr<nix::ast::base>>(binds)), recursive); }
-std::shared_ptr<nix::ast::base> if_then_else(std::shared_ptr<nix::ast::base> test, std::shared_ptr<nix::ast::base> then_expr, std::shared_ptr<nix::ast::base> else_expr) { return std::make_shared<nix::ast::if_then_else>(test, then_expr, else_expr); }
-
+std::shared_ptr<nix::ast::base> boolean(bool v) {
+    return std::make_shared<nix::ast::boolean>(v);
+}
+std::shared_ptr<nix::ast::base> string(std::string v) {
+    return std::make_shared<nix::ast::short_string>(
+        std::vector<std::shared_ptr<nix::ast::base>>(
+            {std::make_shared<nix::ast::string_literal>(v)}));
+}
+std::shared_ptr<nix::ast::base> long_string(std::string v, unsigned long len) {
+    return std::make_shared<nix::ast::long_string>(
+        std::vector<std::shared_ptr<nix::ast::base>>(
+            {std::make_shared<nix::ast::string_literal>(v)}),
+        len);
+}
+std::shared_ptr<nix::ast::base> operator"" _s(const char* v, size_t len) {
+    return string(std::string(v, len));
+}
+std::shared_ptr<nix::ast::base> number(unsigned long long v) {
+    return std::make_shared<nix::ast::number>(v);
+}
+std::shared_ptr<nix::ast::base> operator"" _n(unsigned long long v) {
+    return number(v);
+}
+std::shared_ptr<nix::ast::base> name(std::string v) {
+    return std::make_shared<nix::ast::name>(v);
+}
+std::shared_ptr<nix::ast::base> operator"" _n(const char* v, size_t len) {
+    return name(std::string(v, len));
+}
+std::shared_ptr<nix::ast::base> not_(std::shared_ptr<nix::ast::base> v) {
+    return std::make_shared<nix::ast::not_>(v);
+}
+std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) {
+    return std::make_shared<nix::ast::negate>(v);
+}
+std::shared_ptr<nix::ast::base> add(std::shared_ptr<nix::ast::base> lhs,
+                                    std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::add>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> sub(std::shared_ptr<nix::ast::base> lhs,
+                                    std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::sub>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> mul(std::shared_ptr<nix::ast::base> lhs,
+                                    std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::mul>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs,
+                                    std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::div>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> concat(std::shared_ptr<nix::ast::base> lhs,
+                                       std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::concat>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> merge(std::shared_ptr<nix::ast::base> lhs,
+                                      std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::merge>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> attrtest(std::shared_ptr<nix::ast::base> lhs,
+                                         std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::attrtest>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> attrpath(std::shared_ptr<nix::ast::base> lhs,
+                                         std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::attrpath>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs,
+                                    std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::or_>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs,
+                                     std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::and_>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs,
+                                     std::shared_ptr<nix::ast::base> rhs) {
+    return std::make_shared<nix::ast::impl>(lhs, rhs);
+}
+std::shared_ptr<nix::ast::base>
+assertion(std::shared_ptr<nix::ast::base> what,
+          std::shared_ptr<nix::ast::base> expr) {
+    return std::make_shared<nix::ast::assertion>(what, expr);
+}
+std::shared_ptr<nix::ast::base> with(std::shared_ptr<nix::ast::base> what,
+                                     std::shared_ptr<nix::ast::base> expr) {
+    return std::make_shared<nix::ast::with>(what, expr);
+}
+std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::base> arg,
+                                         std::shared_ptr<nix::ast::base> expr) {
+    return std::make_shared<nix::ast::function>(arg, expr);
+}
+std::shared_ptr<nix::ast::base> bind(std::shared_ptr<nix::ast::base> name,
+                                     std::shared_ptr<nix::ast::base> value) {
+    return std::make_shared<nix::ast::binding_eq>(name, value);
+}
+std::shared_ptr<nix::ast::base>
+array(std::initializer_list<std::shared_ptr<nix::ast::base>> values) {
+    return std::make_shared<nix::ast::array>(
+        std::vector<std::shared_ptr<nix::ast::base>>(values));
+}
+std::shared_ptr<nix::ast::base>
+table(std::initializer_list<std::shared_ptr<nix::ast::base>> binds,
+      bool recursive = false) {
+    return std::make_shared<nix::ast::table>(
+        std::make_shared<nix::ast::binds>(
+            std::vector<std::shared_ptr<nix::ast::base>>(binds)),
+        recursive);
+}
+std::shared_ptr<nix::ast::base>
+if_then_else(std::shared_ptr<nix::ast::base> test,
+             std::shared_ptr<nix::ast::base> then_expr,
+             std::shared_ptr<nix::ast::base> else_expr) {
+    return std::make_shared<nix::ast::if_then_else>(test, then_expr, else_expr);
+}
 
 #if 0
 TEST_CASE("grammar analysis") {
@@ -144,29 +240,36 @@ TEST_CASE("boolean expression") {
     CHECK_AST("!(!true)", not_(not_(boolean(true))));
     CHECK_AST("true", boolean(true));
     CHECK_AST("true || true", or_(boolean(true), boolean(true)));
-    CHECK_AST("true || true || true", or_(or_(boolean(true), boolean(true)), boolean(true)));
+    CHECK_AST("true || true || true",
+              or_(or_(boolean(true), boolean(true)), boolean(true)));
     CHECK_AST("true && true", and_(boolean(true), boolean(true)));
-    CHECK_AST("true && true && true", and_(and_(boolean(true), boolean(true)), boolean(true)));
+    CHECK_AST("true && true && true",
+              and_(and_(boolean(true), boolean(true)), boolean(true)));
     CHECK_AST("true -> true", impl(boolean(true), boolean(true)));
-    CHECK_AST("true -> true -> true", impl(impl(boolean(true), boolean(true)), boolean(true)));
+    CHECK_AST("true -> true -> true",
+              impl(impl(boolean(true), boolean(true)), boolean(true)));
     auto t = boolean(true);
-    CHECK_AST("true -> true -> true && true || true -> true && true && true || true && true", impl(impl(impl(t, t), or_(and_(t, t), t)), or_(and_(and_(t, t), t), and_(t, t))));
+    CHECK_AST("true -> true -> true && true || true -> true && true && true || "
+              "true && true",
+              impl(impl(impl(t, t), or_(and_(t, t), t)),
+                   or_(and_(and_(t, t), t), and_(t, t))));
 }
 
 TEST_CASE("strings") {
     check("\"\""s);
     check("\"shortstring\""s);
-    check("\"shortstring with \\\" escape\""s, "\"shortstring with \" escape\""s);
+    check("\"shortstring with \\\" escape\""s,
+          "\"shortstring with \" escape\""s);
     CHECK_AST("\"xyz\"", string("xyz"));
     check("\"shortstring with dollarcurly ${true}\""s);
     check("\"shortstring with dollarcurlys ${true}${true}\""s);
     check("\"shortstring with dollarcurly ${\"with inner string\"}\""s);
-    check("\"shortstring with nested dollarcurly ${\"[outer,${\"<inner>\"}]\"}\""s);
+    check(
+        "\"shortstring with nested dollarcurly ${\"[outer,${\"<inner>\"}]\"}\""s);
     check("''''"s);
     check("''longstring''"s);
     check("''longstring with ''' escape''"s, "''longstring with ' escape''"s);
 }
-
 
 /*
 TEST_CASE("bla") {
@@ -176,7 +279,6 @@ TEST_CASE("bla") {
         std::cout << "parsed: " << result.data << std::endl;
     }
 }*/
-
 
 TEST_CASE("number") {
     check("1337", 1337);
@@ -199,14 +301,13 @@ TEST_CASE("arithmetic product") {
     CHECK_AST("23 * -42", mul(23_n, negate(42_n)));
     CHECK_AST("1 * 2 * 3", mul(mul(1_n, 2_n), 3_n));
     CHECK_AST("1 * -2 * 3", mul(mul(1_n, negate(2_n)), 3_n));
-    CHECK_AST("1 / -2",  div(1_n, negate(2_n)));
+    CHECK_AST("1 / -2", div(1_n, negate(2_n)));
 }
 
 TEST_CASE("arithmetic mixed") {
     check("1 * 2 + 1", "((1*2)+1)"s);
     check("1 + 2 * 1", "(1+(2*1))"s);
 }
-
 
 TEST_CASE("table") {
     check("{ }"s);
@@ -222,7 +323,8 @@ TEST_CASE("table") {
     check("{ inherit (a) b; }"s);
     check("{ inherit (a) b c; }"s);
     check("{ inherit (a) b; inherit c; inherit (d) e; }"s);
-    CHECK_AST("{ a.b = 1; }"s, table({bind(attrpath("a"_n, "b"_n),  1_n)}, false));
+    CHECK_AST("{ a.b = 1; }"s,
+              table({bind(attrpath("a"_n, "b"_n), 1_n)}, false));
 }
 
 TEST_CASE("table merge") {
@@ -249,7 +351,6 @@ TEST_CASE("parameter list") {
     check("{ a, ... }: 1"s);
     check("{ a, b, ... }: 1"s);
 }
-
 
 TEST_CASE("array") {
     check("[]"s, "[ ]"s);
@@ -278,7 +379,8 @@ TEST_CASE("assert") {
     auto t = boolean(true);
     auto a = name("a");
     CHECK_AST("assert true; a", assertion(t, a));
-    CHECK_AST("assert true; assert true && true; a", assertion(t, assertion(and_(t,t), a)));
+    CHECK_AST("assert true; assert true && true; a",
+              assertion(t, assertion(and_(t, t), a)));
 }
 
 TEST_CASE("with") {
@@ -289,18 +391,18 @@ TEST_CASE("with") {
 
 TEST_CASE("if then else") {
     check("if true then \"yes\" else \"false\""s);
-    CHECK_AST("if true then \"yes\" else \"false\"", if_then_else(boolean(true), "yes"_s, "false"_s));
+    CHECK_AST("if true then \"yes\" else \"false\"",
+              if_then_else(boolean(true), "yes"_s, "false"_s));
 }
-
 
 TEST_CASE("complex") {
-
     check("let requiredVersion = import ./lib/minver.nix; in\n"
-            "if ! builtins ? nixVersion || builtins.compareVersions requiredVersion builtins.nixVersion == 1 then \n"
-            "  abort \"This version of Nixpkgs requires Nix >= ${requiredVersion}, please upgrade! See https://nixos.org/wiki/How_to_update_when_Nix_is_too_old_to_evaluate_Nixpkgs\"\n"
-            "else\n"
-            "  import ./pkgs/top-level/impure.nix"s);
+          "if ! builtins ? nixVersion || builtins.compareVersions "
+          "requiredVersion builtins.nixVersion == 1 then \n"
+          "  abort \"This version of Nixpkgs requires Nix >= "
+          "${requiredVersion}, please upgrade! See "
+          "https://nixos.org/wiki/"
+          "How_to_update_when_Nix_is_too_old_to_evaluate_Nixpkgs\"\n"
+          "else\n"
+          "  import ./pkgs/top-level/impure.nix"s);
 }
-
-
-
