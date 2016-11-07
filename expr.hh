@@ -140,7 +140,7 @@ struct boolean : public base {
         auto cast = dynamic_cast<const boolean*>(o);
         return cast && data == cast->data;
     }
-    operator bool() { return data; }
+    operator bool() const { return data; }
     const bool data;
 };
 
