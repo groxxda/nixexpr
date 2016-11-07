@@ -12,7 +12,6 @@
 
 using namespace std::literals;
 
-template <typename Str, typename... Args>
 bool parse_nocatch(const std::string& str, nix::parser::state::base& result) {
     bool res = nix::parser::parse_string(str, result);
     return res;
@@ -49,19 +48,18 @@ template <> std::string compare(nix::parser::state::base& state) {
 
 template <typename R, typename A>
 R compare_downcast(nix::parser::state::base& state) {
-    auto downcast = std::dynamic_pointer_cast<A>(state.value);
+    auto downcast = dynamic_cast<A*>(state.value.get());
     if(!downcast) {
-        auto val = state.value;
         std::stringstream msg("expected ");
         msg << typeid(A).name();
         msg << ", but got type=";
-        if(val) {
-            auto& val_ = *val;
+        if(state.value) {
+            auto& val_ = *state.value;
             msg << typeid(val_).name();
         } else
             msg << "nullptr";
         msg << " with value=";
-        msg << val;
+        msg << state.value;
         throw msg.str();
     }
     return downcast->data;
@@ -92,120 +90,135 @@ template <typename S> void check(S&& str) { check<>(str, str); }
         REQUIRE(ast == result.value);                                          \
     }
 
-std::shared_ptr<nix::ast::base> boolean(bool v) {
-    return std::make_shared<nix::ast::boolean>(v);
+std::unique_ptr<nix::ast::base> boolean(bool v) {
+    return std::make_unique<nix::ast::boolean>(v);
 }
-std::shared_ptr<nix::ast::base> string(std::string v) {
-    return std::make_shared<nix::ast::short_string>(
-        std::vector<std::shared_ptr<nix::ast::base>>(
-            {std::make_shared<nix::ast::string_literal>(v)}));
+std::unique_ptr<nix::ast::base> operator""_b(unsigned long long v) {
+    return std::make_unique<nix::ast::boolean>(v);
 }
-std::shared_ptr<nix::ast::base> long_string(std::string v, unsigned long len) {
-    return std::make_shared<nix::ast::long_string>(
-        std::vector<std::shared_ptr<nix::ast::base>>(
-            {std::make_shared<nix::ast::string_literal>(v)}),
-        len);
+std::unique_ptr<nix::ast::base> string(std::string&& v) {
+    std::vector<std::unique_ptr<nix::ast::base>> vals;
+    vals.push_back(std::make_unique<nix::ast::string_literal>(std::move(v)));
+
+    return std::make_unique<nix::ast::short_string>(std::move(vals));
 }
-std::shared_ptr<nix::ast::base> operator"" _s(const char* v, size_t len) {
+std::unique_ptr<nix::ast::base> long_string(std::string&& v,
+                                            unsigned long len) {
+    std::vector<std::unique_ptr<nix::ast::base>> vals;
+    vals.push_back(std::make_unique<nix::ast::string_literal>(std::move(v)));
+
+    return std::make_unique<nix::ast::long_string>(std::move(vals),
+
+                                                   len);
+}
+std::unique_ptr<nix::ast::base> operator"" _s(const char* v, size_t len) {
     return string(std::string(v, len));
 }
-std::shared_ptr<nix::ast::base> number(unsigned long long v) {
-    return std::make_shared<nix::ast::number>(v);
+std::unique_ptr<nix::ast::base> number(unsigned long long v) {
+    return std::make_unique<nix::ast::number>(v);
 }
-std::shared_ptr<nix::ast::base> operator"" _n(unsigned long long v) {
+std::unique_ptr<nix::ast::base> operator"" _n(unsigned long long v) {
     return number(v);
 }
-std::shared_ptr<nix::ast::base> name(std::string v) {
-    return std::make_shared<nix::ast::name>(v);
+std::unique_ptr<nix::ast::base> name(std::string&& v) {
+    return std::make_unique<nix::ast::name>(std::move(v));
 }
-std::shared_ptr<nix::ast::base> operator"" _n(const char* v, size_t len) {
+std::unique_ptr<nix::ast::base> operator"" _n(const char* v, size_t len) {
     return name(std::string(v, len));
 }
-std::shared_ptr<nix::ast::base> not_(std::shared_ptr<nix::ast::base> v) {
-    return std::make_shared<nix::ast::not_>(v);
+std::unique_ptr<nix::ast::base> not_(std::unique_ptr<nix::ast::base>&& v) {
+    return std::make_unique<nix::ast::not_>(std::move(v));
 }
-std::shared_ptr<nix::ast::base> negate(std::shared_ptr<nix::ast::base> v) {
-    return std::make_shared<nix::ast::negate>(v);
+std::unique_ptr<nix::ast::base> negate(std::unique_ptr<nix::ast::base>&& v) {
+    return std::make_unique<nix::ast::negate>(std::move(v));
 }
-std::shared_ptr<nix::ast::base> add(std::shared_ptr<nix::ast::base> lhs,
-                                    std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::add>(lhs, rhs);
+std::unique_ptr<nix::ast::base> add(std::unique_ptr<nix::ast::base>&& lhs,
+                                    std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::add>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> sub(std::shared_ptr<nix::ast::base> lhs,
-                                    std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::sub>(lhs, rhs);
+std::unique_ptr<nix::ast::base> sub(std::unique_ptr<nix::ast::base>&& lhs,
+                                    std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::sub>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> mul(std::shared_ptr<nix::ast::base> lhs,
-                                    std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::mul>(lhs, rhs);
+std::unique_ptr<nix::ast::base> mul(std::unique_ptr<nix::ast::base>&& lhs,
+                                    std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::mul>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> div(std::shared_ptr<nix::ast::base> lhs,
-                                    std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::div>(lhs, rhs);
+std::unique_ptr<nix::ast::base> div(std::unique_ptr<nix::ast::base>&& lhs,
+                                    std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::div>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> concat(std::shared_ptr<nix::ast::base> lhs,
-                                       std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::concat>(lhs, rhs);
+std::unique_ptr<nix::ast::base> concat(std::unique_ptr<nix::ast::base>&& lhs,
+                                       std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::concat>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> merge(std::shared_ptr<nix::ast::base> lhs,
-                                      std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::merge>(lhs, rhs);
+std::unique_ptr<nix::ast::base> merge(std::unique_ptr<nix::ast::base>&& lhs,
+                                      std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::merge>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> attrtest(std::shared_ptr<nix::ast::base> lhs,
-                                         std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::attrtest>(lhs, rhs);
+std::unique_ptr<nix::ast::base>
+attrtest(std::unique_ptr<nix::ast::base>&& lhs,
+         std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::attrtest>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> attrpath(std::shared_ptr<nix::ast::base> lhs,
-                                         std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::attrpath>(lhs, rhs);
+std::unique_ptr<nix::ast::base>
+attrpath(std::unique_ptr<nix::ast::base>&& lhs,
+         std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::attrpath>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> or_(std::shared_ptr<nix::ast::base> lhs,
-                                    std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::or_>(lhs, rhs);
+std::unique_ptr<nix::ast::base> or_(std::unique_ptr<nix::ast::base>&& lhs,
+                                    std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::or_>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> and_(std::shared_ptr<nix::ast::base> lhs,
-                                     std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::and_>(lhs, rhs);
+std::unique_ptr<nix::ast::base> and_(std::unique_ptr<nix::ast::base>&& lhs,
+                                     std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::and_>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base> impl(std::shared_ptr<nix::ast::base> lhs,
-                                     std::shared_ptr<nix::ast::base> rhs) {
-    return std::make_shared<nix::ast::impl>(lhs, rhs);
+std::unique_ptr<nix::ast::base> impl(std::unique_ptr<nix::ast::base>&& lhs,
+                                     std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::impl>(std::move(lhs), std::move(rhs));
 }
-std::shared_ptr<nix::ast::base>
-assertion(std::shared_ptr<nix::ast::base> what,
-          std::shared_ptr<nix::ast::base> expr) {
-    return std::make_shared<nix::ast::assertion>(what, expr);
+std::unique_ptr<nix::ast::base>
+assertion(std::unique_ptr<nix::ast::base>&& what,
+          std::unique_ptr<nix::ast::base>&& expr) {
+    return std::make_unique<nix::ast::assertion>(std::move(what),
+                                                 std::move(expr));
 }
-std::shared_ptr<nix::ast::base> with(std::shared_ptr<nix::ast::base> what,
-                                     std::shared_ptr<nix::ast::base> expr) {
-    return std::make_shared<nix::ast::with>(what, expr);
+std::unique_ptr<nix::ast::base> with(std::unique_ptr<nix::ast::base>&& what,
+                                     std::unique_ptr<nix::ast::base>&& expr) {
+    return std::make_unique<nix::ast::with>(std::move(what), std::move(expr));
 }
-std::shared_ptr<nix::ast::base> function(std::shared_ptr<nix::ast::base> arg,
-                                         std::shared_ptr<nix::ast::base> expr) {
-    return std::make_shared<nix::ast::function>(arg, expr);
+std::unique_ptr<nix::ast::base>
+function(std::unique_ptr<nix::ast::base>&& arg,
+         std::unique_ptr<nix::ast::base>&& expr) {
+    return std::make_unique<nix::ast::function>(std::move(arg),
+                                                std::move(expr));
 }
-std::shared_ptr<nix::ast::base> bind(std::shared_ptr<nix::ast::base> name,
-                                     std::shared_ptr<nix::ast::base> value) {
-    return std::make_shared<nix::ast::binding_eq>(name, value);
+std::unique_ptr<nix::ast::base> bind(std::unique_ptr<nix::ast::base>&& name,
+                                     std::unique_ptr<nix::ast::base>&& value) {
+    return std::make_unique<nix::ast::binding_eq>(std::move(name),
+                                                  std::move(value));
 }
-std::shared_ptr<nix::ast::base>
-array(std::initializer_list<std::shared_ptr<nix::ast::base>> values) {
-    return std::make_shared<nix::ast::array>(
-        std::vector<std::shared_ptr<nix::ast::base>>(values));
+template <typename... T> std::unique_ptr<nix::ast::base> array(T&&... values) {
+    std::unique_ptr<nix::ast::base> vals[] = {std::move(values)...};
+    std::vector<std::unique_ptr<nix::ast::base>> vec;
+    for(auto&& i : vals) vec.push_back(std::move(i));
+    return std::make_unique<nix::ast::array>(std::move(vec));
 }
-std::shared_ptr<nix::ast::base>
-table(std::initializer_list<std::shared_ptr<nix::ast::base>> binds,
-      bool recursive = false) {
-    return std::make_shared<nix::ast::table>(
-        std::make_shared<nix::ast::binds>(
-            std::vector<std::shared_ptr<nix::ast::base>>(binds)),
-        recursive);
+template <typename... T>
+std::unique_ptr<nix::ast::base> table(bool recursive, T&&... binds) {
+    std::unique_ptr<nix::ast::base> vals[] = {std::move(binds)...};
+    std::vector<std::unique_ptr<nix::ast::base>> vec;
+    for(auto&& i : vals) vec.push_back(std::move(i));
+    return std::make_unique<nix::ast::table>(
+        std::make_unique<nix::ast::binds>(std::move(vec)), recursive);
 }
-std::shared_ptr<nix::ast::base>
-if_then_else(std::shared_ptr<nix::ast::base> test,
-             std::shared_ptr<nix::ast::base> then_expr,
-             std::shared_ptr<nix::ast::base> else_expr) {
-    return std::make_shared<nix::ast::if_then_else>(test, then_expr, else_expr);
+std::unique_ptr<nix::ast::base>
+if_then_else(std::unique_ptr<nix::ast::base>&& test,
+             std::unique_ptr<nix::ast::base>&& then_expr,
+             std::unique_ptr<nix::ast::base>&& else_expr) {
+    return std::make_unique<nix::ast::if_then_else>(
+        std::move(test), std::move(then_expr), std::move(else_expr));
 }
 
 #if 0
@@ -237,11 +250,10 @@ TEST_CASE("boolean expression") {
     CHECK_AST("true -> true", impl(boolean(true), boolean(true)));
     CHECK_AST("true -> true -> true",
               impl(impl(boolean(true), boolean(true)), boolean(true)));
-    auto t = boolean(true);
     CHECK_AST("true -> true -> true && true || true -> true && true && true || "
               "true && true",
-              impl(impl(impl(t, t), or_(and_(t, t), t)),
-                   or_(and_(and_(t, t), t), and_(t, t))));
+              impl(impl(impl(1_b, 1_b), or_(and_(1_b, 1_b), 1_b)),
+                   or_(and_(and_(1_b, 1_b), 1_b), and_(1_b, 1_b))));
 }
 
 TEST_CASE("strings") {
@@ -300,9 +312,9 @@ TEST_CASE("arithmetic mixed") {
 
 TEST_CASE("table") {
     check("{ }"s);
-    CHECK_AST("{}", table({}));
+    CHECK_AST("{}", table(false));
     check("rec { }"s);
-    CHECK_AST("rec {}", table({}, true));
+    CHECK_AST("rec {}", table(true));
     check("{ a = 1; }"s);
     check("rec { a = 1; }"s);
     check("{ a = 1; b = \"c\"; }"s);
@@ -312,8 +324,7 @@ TEST_CASE("table") {
     check("{ inherit (a) b; }"s);
     check("{ inherit (a) b c; }"s);
     check("{ inherit (a) b; inherit c; inherit (d) e; }"s);
-    CHECK_AST("{ a.b = 1; }"s,
-              table({bind(attrpath("a"_n, "b"_n), 1_n)}, false));
+    CHECK_AST("{ a.b = 1; }"s, table(false, bind(attrpath("a"_n, "b"_n), 1_n)));
 }
 
 TEST_CASE("table merge") {
@@ -347,12 +358,10 @@ TEST_CASE("array") {
     check("[ 1 ]"s);
     check("[ 1 \"b\" ]"s);
     check("[ 1 \"b\" c ]"s);
-    CHECK_AST("[ 1 \"b\" c ]", array({1_n, "b"_s, "c"_n}));
+    CHECK_AST("[ 1 \"b\" c ]", array(1_n, "b"_s, "c"_n));
 }
 
-TEST_CASE("array merge") {
-    CHECK_AST("[] ++ []", concat(array({}), array({})));
-}
+TEST_CASE("array merge") { CHECK_AST("[] ++ []", concat(array(), array())); }
 
 TEST_CASE("let in") {
     check("let in 1"s);
@@ -365,18 +374,12 @@ TEST_CASE("let in") {
 }
 
 TEST_CASE("assert") {
-    auto t = boolean(true);
-    auto a = name("a");
-    CHECK_AST("assert true; a", assertion(t, a));
+    CHECK_AST("assert true; a", assertion(1_b, "a"_n));
     CHECK_AST("assert true; assert true && true; a",
-              assertion(t, assertion(and_(t, t), a)));
+              assertion(1_b, assertion(and_(1_b, 1_b), "a"_n)));
 }
 
-TEST_CASE("with") {
-    auto t = boolean(true);
-    auto a = name("a");
-    CHECK_AST("with true; a", with(t, a));
-}
+TEST_CASE("with") { CHECK_AST("with true; a", with(1_b, "a"_n)); }
 
 TEST_CASE("if then else") {
     check("if true then \"yes\" else \"false\""s);

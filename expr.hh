@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <typeinfo>
 #include <vector>
 
 namespace nix {
@@ -44,17 +45,12 @@ inline std::ostream& operator<<(std::ostream& o, const base& b) {
 }
 
 inline std::ostream& operator<<(std::ostream& o,
-                                const std::shared_ptr<base>& b) {
-    return b ? (o << *b) : (o << "NULL");
-}
-
-inline std::ostream& operator<<(std::ostream& o,
                                 const std::unique_ptr<base>& b) {
     return b ? (o << *b) : (o << "NULL");
 }
 
-inline bool operator==(const std::shared_ptr<base>& a,
-                       const std::shared_ptr<base>& b) {
+inline bool operator==(const std::unique_ptr<base>& a,
+                       const std::unique_ptr<base>& b) {
     return a->operator==(b.get());
 }
 
