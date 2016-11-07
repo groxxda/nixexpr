@@ -10,6 +10,8 @@ TARGET = main
 #main.o: ex
 expr.o: expr.hh expr.cc
 
+expr.hh: ast.hh
+
 $(TARGET): $(OBJS)
 	$(CXX) -o $(TARGET) $(OBJS)
 	
