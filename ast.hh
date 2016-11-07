@@ -217,6 +217,14 @@ struct merge : public binary_expression<'/', '/'> {
     using binary_expression<'/', '/'>::binary_expression;
 };
 
+struct eq : public binary_expression<'=', '='> {
+    using binary_expression<'=', '='>::binary_expression;
+};
+
+struct neq : public binary_expression<'!', '='> {
+    using binary_expression<'!', '='>::binary_expression;
+};
+
 struct attrtest : public binary_expression<'?'> {
     using binary_expression<'?'>::binary_expression;
 };

@@ -132,6 +132,14 @@ std::unique_ptr<nix::ast::base> not_(std::unique_ptr<nix::ast::base>&& v) {
 std::unique_ptr<nix::ast::base> negate(std::unique_ptr<nix::ast::base>&& v) {
     return std::make_unique<nix::ast::negate>(std::move(v));
 }
+std::unique_ptr<nix::ast::base> eq(std::unique_ptr<nix::ast::base>&& lhs,
+                                   std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::eq>(std::move(lhs), std::move(rhs));
+}
+std::unique_ptr<nix::ast::base> neq(std::unique_ptr<nix::ast::base>&& lhs,
+                                    std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::neq>(std::move(lhs), std::move(rhs));
+}
 std::unique_ptr<nix::ast::base> add(std::unique_ptr<nix::ast::base>&& lhs,
                                     std::unique_ptr<nix::ast::base>&& rhs) {
     return std::make_unique<nix::ast::add>(std::move(lhs), std::move(rhs));
@@ -254,6 +262,12 @@ TEST_CASE("boolean expression") {
               "true && true",
               impl(impl(impl(1_b, 1_b), or_(and_(1_b, 1_b), 1_b)),
                    or_(and_(and_(1_b, 1_b), 1_b), and_(1_b, 1_b))));
+}
+
+TEST_CASE("comparison") {
+    CHECK_AST("1 == 1", eq(1_n, 1_n));
+    CHECK_AST("[] == 1", eq(array(), 1_n));
+    CHECK_AST("true != false", neq(1_b, 0_b));
 }
 
 TEST_CASE("strings") {

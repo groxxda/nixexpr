@@ -96,12 +96,15 @@ struct if_then_else : base {
     }
 
     void set_then() {
+        assert(test);
         assert(value);
         then_expr = std::move(value);
     }
 
     void success(base& in_result) {
         assert(!in_result.value);
+        assert(test);
+        assert(then_expr);
         assert(value);
         in_result.value = std::make_unique<ast::if_then_else>(
             std::move(test), std::move(then_expr), std::move(value));
@@ -554,14 +557,18 @@ struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>,
 template <typename CTX>
 struct expr_ordering : left_assoc<expr_merge, operators_ordering, expr_add> {};
 
-template <char... CMP>
-struct expr_eq_apply
-    : pegtl::if_must<padr<pegtl::string<CMP...>>, expr_ordering<void>> {};
-// todo: we cannot do anything here, right?
+struct operator_eq : padr<pegtl::string<'=', '='>> {
+    using ast = ast::eq;
+    using next = expr_ordering<void>;
+};
+struct operator_neq : padr<pegtl::string<'!', '='>> {
+    using ast = ast::neq;
+    using next = expr_ordering<void>;
+};
 template <typename CTX>
 struct expr_equality : pegtl::seq<expr_ordering<CTX>,
-                                  pegtl::sor<expr_eq_apply<'=', '='>,
-                                             expr_eq_apply<'!', '='>,
+                                  pegtl::sor<binary_expr_apply<operator_eq>,
+                                             binary_expr_apply<operator_neq>,
                                              pegtl::success>> {};
 
 struct operator_and : padr<pegtl::two<'&'>> {
@@ -783,12 +790,6 @@ struct control::normal<expression<x>>
                                      action,
                                      pegtl::normal> {};
 
-template <char... CMP>
-struct control::normal<expr_eq_apply<CMP...>>
-    : pegtl::change_state<
-          expr_eq_apply<CMP...>,
-          state::binary_expression<ast::binary_expression<CMP...>>,
-          pegtl::normal> {};
 template <>
 struct control::normal<variable_tail>
     : pegtl::change_state<variable_tail,
