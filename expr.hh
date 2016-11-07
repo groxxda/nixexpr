@@ -504,8 +504,8 @@ struct binds : base {
 
     void push_back() {
         assert(value);
-        assert(dynamic_cast<ast::binding_eq>(*value) ||
-               dynamic_cast<ast::binding_inherit>(*value));
+        assert(dynamic_cast<ast::binding_eq*>(value.get()) ||
+               dynamic_cast<ast::binding_inherit*>(value.get()));
         data.push_back(std::move(value));
     }
 
