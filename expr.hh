@@ -24,6 +24,7 @@ struct base {
     base(const base&) = delete;
     void operator=(const base&) = delete;
     std::unique_ptr<ast::base> value;
+
     void success(base& in_result) {
         assert(!in_result.value);
         assert(value);
@@ -342,14 +343,30 @@ struct boolean : pegtl::sor<keyword::key_true, keyword::key_false> {};
 struct attr : pegtl::sor<name, string, dollarcurly_expr> {};
 struct attrtail : pegtl::sor<name, string, dollarcurly_expr> {};
 
-struct attrpath_apply : pegtl::if_must<padr<pegtl::one<'.'>>, padr<attrtail>> {
+
+template <typename op> struct binary_expr_start : op {};
+template <typename op>
+struct binary_expr_apply
+    : pegtl::if_must<binary_expr_start<op>, typename op::next> {};
+
+struct operator_attrpath : padr<pegtl::one<'.'>> {
+    using ast = ast::attrpath;
+    using next = attrtail;
 };
-struct attrpath : pegtl::seq<padr<attr>, pegtl::star<attrpath_apply>> {};
+struct attrpath
+    : pegtl::seq<padr<attr>,
+                 pegtl::star<binary_expr_apply<operator_attrpath>>> {};
 
 template <typename CTX = void> struct expression;
 
-struct formal_apply : pegtl::if_must<padr<pegtl::one<'?'>>, expression<>> {};
-struct formal : pegtl::seq<padr<name>, pegtl::opt<formal_apply>> {};
+
+struct operator_formal : padr<pegtl::one<'?'>> {
+    using ast = ast::formal;
+    using next = expression<>;
+};
+struct formal
+    : pegtl::seq<padr<name>, pegtl::opt<binary_expr_apply<operator_formal>>> {};
+
 struct formals_nonempty
     : pegtl::seq<pegtl::list<formal, padr<pegtl::one<','>>>,
                  pegtl::opt<padr<pegtl::one<','>>,
@@ -391,12 +408,13 @@ struct table_apply : pegtl::if_must<table_begin, binds<table_end>> {};
 struct table : pegtl::sor<table_apply<table_begin_recursive>,
                           table_apply<table_begin_nonrecursive>> {};
 
-// struct bind_eq_attrpath : attrpath {};
-struct bind_eq_operator : padr<pegtl::one<'='>> {};
 // XXX shortcut here?
-struct bind_eq_apply : pegtl::seq<expression<>, padr<pegtl::one<';'>>> {};
-struct bind_eq : pegtl::seq<padr<attrpath>,
-                            pegtl::if_must<bind_eq_operator, bind_eq_apply>> {};
+struct bind_eq_operator : padr<pegtl::one<'='>> {
+    using ast = ast::binding_eq;
+    using next = pegtl::seq<expression<>, padr<pegtl::one<';'>>>;
+};
+struct bind_eq
+    : pegtl::seq<padr<attrpath>, binary_expr_apply<bind_eq_operator>> {};
 struct bind_inherit_attrname : attrpath {};
 struct bind_inherit_from : pegtl::if_must<padr<pegtl::one<'('>>,
                                           expression<table>,
@@ -467,33 +485,52 @@ struct expr_negate
 // template<> struct expr_negate<number> : pegtl::seq<pegtl::star<op_one<'-',
 // '>'>>, expr_apply<number>> {};
 
-struct operator_attrtest : padr<pegtl::one<'?'>> {};
-struct expr_attrtest_apply : pegtl::if_must<operator_attrtest, attrpath> {};
+struct operator_attrtest : padr<pegtl::one<'?'>> {
+    using ast = ast::attrtest;
+    using next = attrpath;
+};
 struct expr_attrtest
-    : pegtl::seq<expr_negate<void>, pegtl::opt<expr_attrtest_apply>> {};
+    : pegtl::seq<expr_negate<void>,
+                 pegtl::opt<binary_expr_apply<operator_attrtest>>> {};
+
 
 // XXX right assoc?
-struct operator_concat : padr<pegtl::two<'+'>> {};
-struct expr_concat_apply : pegtl::if_must<operator_concat, expr_apply<array>> {
+struct operator_concat : padr<pegtl::two<'+'>> {
+    using ast = ast::concat;
+    using next = expr_apply<array>;
 };
-struct expr_concat : pegtl::seq<expr_attrtest, pegtl::star<expr_concat_apply>> {
+struct expr_concat
+    : pegtl::seq<expr_attrtest,
+                 pegtl::star<binary_expr_apply<operator_concat>>> {};
+
+struct operator_div : op_one<'/', '/'> {
+    using ast = ast::div;
+    using next = expr_negate<number>;
 };
+struct expr_div
+    : pegtl::seq<expr_concat, pegtl::star<binary_expr_apply<operator_div>>> {};
 
-struct operator_div : op_one<'/', '/'> {};
-struct expr_div_apply : pegtl::if_must<operator_div, expr_negate<number>> {};
-struct expr_div : pegtl::seq<expr_concat, pegtl::star<expr_div_apply>> {};
+struct operator_mul : padr<pegtl::one<'*'>> {
+    using ast = ast::mul;
+    using next = expr_div;
+};
+struct expr_mul
+    : pegtl::seq<expr_div, pegtl::star<binary_expr_apply<operator_mul>>> {};
 
-struct operator_mul : padr<pegtl::one<'*'>> {};
-struct expr_mul_apply : pegtl::if_must<operator_mul, expr_div> {};
-struct expr_mul : pegtl::seq<expr_div, pegtl::star<expr_mul_apply>> {};
+struct operator_sub : op_one<'-', '>'> {
+    using ast = ast::sub;
+    using next = expr_mul;
+};
+struct expr_sub
+    : pegtl::seq<expr_mul, pegtl::star<binary_expr_apply<operator_sub>>> {};
 
-struct operator_sub : op_one<'-', '>'> {};
-struct expr_sub_apply : pegtl::if_must<operator_sub, expr_mul> {};
-struct expr_sub : pegtl::seq<expr_mul, pegtl::star<expr_sub_apply>> {};
 
-struct operator_add : padr<pegtl::one<'+'>> {};
-struct expr_add_apply : pegtl::if_must<operator_add, expr_sub> {};
-struct expr_add : pegtl::seq<expr_sub, pegtl::star<expr_add_apply>> {};
+struct operator_add : padr<pegtl::one<'+'>> {
+    using ast = ast::add;
+    using next = expr_sub;
+};
+struct expr_add
+    : pegtl::seq<expr_sub, pegtl::star<binary_expr_apply<operator_add>>> {};
 
 struct operator_not : padr<pegtl::one<'!'>> {};
 struct operator_not_double : pegtl::rep<2, operator_not> {};
@@ -503,17 +540,19 @@ struct expr_not
                  pegtl::if_then_else<operator_not, expr_not_val, expr_add>> {};
 
 // XXX: right assoc
-struct operator_merge : padr<pegtl::two<'/'>> {};
-struct expr_merge_apply : pegtl::if_must<operator_merge, expr_apply<table>> {};
-struct expr_merge : pegtl::seq<expr_not, pegtl::star<expr_merge_apply>> {};
+struct operator_merge : padr<pegtl::two<'/'>> {
+    using ast = ast::merge;
+    using next = expr_apply<table>;
+};
+struct expr_merge
+    : pegtl::seq<expr_not, pegtl::star<binary_expr_apply<operator_merge>>> {};
+
 
 struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>,
                                             pegtl::string<'>', '='>,
                                             pegtl::one<'<', '>'>>> {};
 template <typename CTX>
 struct expr_ordering : left_assoc<expr_merge, operators_ordering, expr_add> {};
-// template<> struct expr_ordering<number> : left_assoc<expr_sum<number>,
-// operators_ordering> {};
 
 template <char... CMP>
 struct expr_eq_apply
@@ -525,21 +564,32 @@ struct expr_equality : pegtl::seq<expr_ordering<CTX>,
                                              expr_eq_apply<'!', '='>,
                                              pegtl::success>> {};
 
-struct operator_and : padr<pegtl::two<'&'>> {};
-struct expr_and_apply : pegtl::if_must<operator_and, expr_equality<boolean>> {};
+struct operator_and : padr<pegtl::two<'&'>> {
+    using ast = ast::and_;
+    using next = expr_equality<boolean>;
+};
 template <typename CTX>
-struct expr_and : pegtl::seq<expr_equality<CTX>, pegtl::star<expr_and_apply>> {
+struct expr_and : pegtl::seq<expr_equality<CTX>,
+                             pegtl::star<binary_expr_apply<operator_and>>> {};
+
+
+struct operator_or : padr<pegtl::two<'|'>> {
+    using ast = ast::or_;
+    using next = expr_and<boolean>;
+};
+template <typename CTX>
+struct expr_or
+    : pegtl::seq<expr_and<CTX>, pegtl::star<binary_expr_apply<operator_or>>> {};
+
+struct operator_impl : padr<pegtl::string<'-', '>'>> {
+    using ast = ast::impl;
+    using next = expr_or<boolean>;
+};
+template <typename CTX>
+struct expr_impl
+    : pegtl::seq<expr_or<CTX>, pegtl::star<binary_expr_apply<operator_impl>>> {
 };
 
-struct operator_or : padr<pegtl::two<'|'>> {};
-struct expr_or_apply : pegtl::if_must<operator_or, expr_and<boolean>> {};
-template <typename CTX>
-struct expr_or : pegtl::seq<expr_and<CTX>, pegtl::star<expr_or_apply>> {};
-
-struct operator_impl : padr<pegtl::string<'-', '>'>> {};
-struct expr_impl_apply : pegtl::if_must<operator_impl, expr_or<boolean>> {};
-template <typename CTX>
-struct expr_impl : pegtl::seq<expr_or<CTX>, pegtl::star<expr_impl_apply>> {};
 
 template <typename CTX>
 struct expr_if_apply : pegtl::seq<expression<boolean>,
@@ -555,30 +605,38 @@ struct expr_if : pegtl::if_must<keyword::key_if, expr_if_apply<CTX>> {};
 // padr<pegtl::sor<path, spath, string, name, expr_select>>,
 // pegtl::opt<expr_applying<expr_applying_tail>>> {};
 
-template <typename CTX> struct assert_apply : expression<CTX> {};
+template <typename CTX> struct operator_assert : padr<pegtl::one<';'>> {
+    using ast = ast::assertion;
+    using next = expression<CTX>;
+};
 template <typename CTX>
 struct assert : pegtl::if_must<keyword::key_assert,
                                expression<boolean>,
-                               padr<pegtl::one<';'>>,
-                               assert_apply<CTX>> {};
+                               binary_expr_apply<operator_assert<CTX>>> {};
 
+
+template <typename CTX> struct operator_with : padr<pegtl::one<';'>> {
+    using ast = ast::with;
+    using next = expression<CTX>;
+};
 // todo: restrict context?
-template <typename CTX> struct with_apply : expression<CTX> {};
 template <typename CTX>
 struct with : pegtl::if_must<keyword::key_with,
                              expression<>,
-                             padr<pegtl::one<';'>>,
-                             with_apply<CTX>> {};
+                             binary_expr_apply<operator_with<CTX>>> {};
 
-template <typename CTX> struct let_apply : expression<CTX> {};
-template <typename CTX>
-struct let
-    : pegtl::if_must<keyword::key_let, binds<keyword::key_in>, let_apply<CTX>> {
+
+template <typename CTX> struct operator_let : pegtl::success {
+    using ast = ast::let;
+    using next = expression<CTX>;
 };
 
-template <typename CTX> struct function_apply;
 template <typename CTX>
-struct function : pegtl::if_must<arguments, function_apply<CTX>> {};
+struct let : pegtl::if_must<keyword::key_let,
+                            binds<keyword::key_in>,
+                            binary_expr_apply<operator_let<CTX>>> {};
+
+template <typename CTX> struct function;
 
 template <typename CTX>
 struct statement : pegtl::sor<assert<CTX>, with<CTX>, let<CTX>, function<CTX>> {
@@ -598,7 +656,14 @@ template <>
 struct expression<table>
     : pegtl::sor<statement<table>, expr_if<table>, expr_merge> {};
 
-template <typename CTX> struct function_apply : expression<CTX> {};
+
+template <typename CTX> struct operator_function : pegtl::success {
+    using ast = ast::function;
+    using next = expression<CTX>;
+};
+template <typename CTX>
+struct function
+    : pegtl::if_must<arguments, binary_expr_apply<operator_function<CTX>>> {};
 
 struct grammar : pegtl::must<seps, expression<>, pegtl::eof> {};
 
@@ -717,46 +782,7 @@ struct control::normal<expression<x>>
                                      state::base,
                                      action,
                                      pegtl::normal> {};
-template <>
-struct control::normal<expr_add_apply>
-    : pegtl::change_state<expr_add_apply,
-                          state::binary_expression<ast::add>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<expr_sub_apply>
-    : pegtl::change_state<expr_sub_apply,
-                          state::binary_expression<ast::sub>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<expr_mul_apply>
-    : pegtl::change_state<expr_mul_apply,
-                          state::binary_expression<ast::mul>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<expr_div_apply>
-    : pegtl::change_state<expr_div_apply,
-                          state::binary_expression<ast::div>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<expr_concat_apply>
-    : pegtl::change_state<expr_concat_apply,
-                          state::binary_expression<ast::concat>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<expr_merge_apply>
-    : pegtl::change_state<expr_merge_apply,
-                          state::binary_expression<ast::merge>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<expr_or_apply>
-    : pegtl::change_state<expr_or_apply,
-                          state::binary_expression<ast::or_>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<expr_and_apply>
-    : pegtl::change_state<expr_and_apply,
-                          state::binary_expression<ast::and_>,
-                          pegtl::normal> {};
+
 template <char... CMP>
 struct control::normal<expr_eq_apply<CMP...>>
     : pegtl::change_state<
@@ -764,24 +790,9 @@ struct control::normal<expr_eq_apply<CMP...>>
           state::binary_expression<ast::binary_expression<CMP...>>,
           pegtl::normal> {};
 template <>
-struct control::normal<expr_impl_apply>
-    : pegtl::change_state<expr_impl_apply,
-                          state::binary_expression<ast::impl>,
-                          pegtl::normal> {};
-template <>
 struct control::normal<variable_tail>
     : pegtl::change_state<variable_tail,
                           state::binary_expression<ast::attrpath>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<attrpath_apply>
-    : pegtl::change_state<attrpath_apply,
-                          state::binary_expression<ast::attrpath>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<expr_attrtest_apply>
-    : pegtl::change_state<expr_attrtest_apply,
-                          state::binary_expression<ast::attrtest>,
                           pegtl::normal> {};
 template <>
 struct control::normal<array_content>
@@ -789,11 +800,13 @@ struct control::normal<array_content>
                                      state::array,
                                      actions::array,
                                      pegtl::normal> {};
-template <>
-struct control::normal<bind_eq_apply>
-    : pegtl::change_state<bind_eq_apply,
-                          state::binary_expression<ast::binding_eq>,
-                          pegtl::normal> {};
+template <typename x>
+struct control::normal<binary_expr_apply<x>>
+    : pegtl::change_state_and_action<binary_expr_apply<x>,
+                                     state::binary_expression<typename x::ast>,
+                                     action,
+                                     pegtl::normal> {};
+
 template <>
 struct control::normal<bind_inherit_apply>
     : pegtl::change_state<bind_inherit_apply,
@@ -809,12 +822,7 @@ struct control::normal<variable_tail_or_apply>
     : pegtl::change_state<variable_tail_or_apply,
                           state::binary_expression<ast::set_or>,
                           pegtl::normal> {};
-template <>
-struct control::normal<formal_apply>
-    : pegtl::change_state_and_action<formal_apply,
-                                     state::binary_expression<ast::formal>,
-                                     action,
-                                     pegtl::normal> {};
+
 template <>
 struct control::normal<formals>
     : pegtl::change_state_and_action<formals,
@@ -827,26 +835,6 @@ struct control::normal<binds<x>>
                                      state::binds,
                                      actions::binds,
                                      pegtl::normal> {};
-template <typename x>
-struct control::normal<assert_apply<x>>
-    : pegtl::change_state<assert_apply<x>,
-                          state::binary_expression<ast::assertion>,
-                          pegtl::normal> {};
-template <typename x>
-struct control::normal<with_apply<x>>
-    : pegtl::change_state<with_apply<x>,
-                          state::binary_expression<ast::with>,
-                          pegtl::normal> {};
-template <typename x>
-struct control::normal<let_apply<x>>
-    : pegtl::change_state<let_apply<x>,
-                          state::binary_expression<ast::let>,
-                          pegtl::normal> {};
-template <typename x>
-struct control::normal<function_apply<x>>
-    : pegtl::change_state<function_apply<x>,
-                          state::binary_expression<ast::function>,
-                          pegtl::normal> {};
 template <typename x>
 struct control::normal<expr_if_apply<x>>
     : pegtl::change_state_and_action<expr_if_apply<x>,
