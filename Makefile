@@ -34,3 +34,6 @@ test: $(TEST_TARGET)
 
 %:
 	@:
+
+format: .clang-format
+	clang-format -i $(wildcard *.hh *.cc test/*.cc)
