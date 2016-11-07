@@ -46,13 +46,13 @@ inline bool operator==(const std::unique_ptr<base>& a,
 }
 
 struct number : public base {
-    explicit number(const unsigned long long in_data) : base(), data(in_data){};
+    explicit number(const uint64_t in_data) : base(), data(in_data){};
     virtual void stream(std::ostream& o) const override { o << data; }
     virtual bool operator==(const base* o) const override {
         auto cast = dynamic_cast<const number*>(o);
         return cast && data == cast->data;
     }
-    const unsigned long long data;
+    const uint64_t data;
 };
 
 struct string_literal : public base {
