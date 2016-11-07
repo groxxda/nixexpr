@@ -350,6 +350,7 @@ TEST_CASE("parameter list") {
     check("{ ... }: 1"s);
     check("{ a, ... }: 1"s);
     check("{ a, b, ... }: 1"s);
+    check("{ a ? true, b ? ''${a}'', c ? { }, ... }: 1"s);
 }
 
 TEST_CASE("array") {
@@ -368,6 +369,7 @@ TEST_CASE("let in") {
     check("let x = 1; in 1"s);
     check("let x = 1; y = 2; in 1"s);
     check("let inherit x; in 1"s);
+    check("let inherit (x); in 1"s);
     check("let inherit (x) y; in 1"s);
     check("let inherit (x) y z; in 1"s);
     check("let inherit ({ a = 1; }) b c; in 1"s);
