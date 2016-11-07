@@ -13,11 +13,8 @@
 using namespace std::literals;
 
 template <typename Str, typename... Args>
-bool parse_nocatch(Str&& str, Args&&... args) {
-    auto res = pegtl::parse_string<nix::parser::grammar, nix::parser::action,
-                                   nix::parser::control::normal>(
-        std::forward<Str>(str), std::forward<Str>(str),
-        std::forward<Args>(args)...);
+bool parse_nocatch(const std::string& str, nix::parser::state::base& result) {
+    bool res = nix::parser::parse_string(str, result);
     return res;
 }
 

@@ -1333,6 +1333,11 @@ template <> struct action<table_apply<table_begin_recursive>> {
 //    template<> const std::string errors<expr_sum<number>>::error_message =
 //    "incomplete sum expression, expected number";
 
+
+bool parse_file(const std::string& filename, nix::parser::state::base& res);
+
+bool parse_string(const std::string& data, nix::parser::state::base& res);
+
 } // namespace parser
 
 } // namespace nix

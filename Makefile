@@ -1,14 +1,14 @@
 CXXFLAGS =	-O2 -g -Wall -fmessage-length=0 -std=c++1z $(INCLUDES) -ftemplate-depth=821 #-ftemplate-backtrace-limit=0
 CXX = clang++
 
-OBJS = main.o
+OBJS = main.o expr.o
 
 INCLUDES = -IPEGTL -I.
 
 TARGET = main
 
-main.o: expr.hh
-expr.o: expr.hh
+#main.o: ex
+expr.o: expr.hh expr.cc
 
 $(TARGET): $(OBJS)
 	$(CXX) -o $(TARGET) $(OBJS)
@@ -23,8 +23,8 @@ test_clean:
 
 TEST_TARGET = test/test
 
-test/test.o: expr.hh test/test.cc
-TEST_OBJS = test/test.o test/catch.o
+test/test.o: test/test.cc
+TEST_OBJS = test/test.o test/catch.o expr.o
 
 $(TEST_TARGET): $(TEST_OBJS)
 	$(CXX) -o $(TEST_TARGET) $(TEST_OBJS)
