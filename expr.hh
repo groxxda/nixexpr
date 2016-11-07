@@ -84,8 +84,7 @@ struct short_string : public base {
         : base(), parts(std::move(parts)){};
     virtual void stream(std::ostream& o) const override {
         o << "\"";
-        for(const auto& i : parts)
-            o << *i;
+        for(const auto& i : parts) o << *i;
         o << "\"";
     }
     virtual bool operator==(const base* o) const override {
@@ -101,8 +100,7 @@ struct long_string : public base {
         : base(), parts(std::move(parts)), prefixlen(prefixlen) {}
     virtual void stream(std::ostream& o) const override {
         o << "''";
-        for(const auto& i : parts)
-            o << *i;
+        for(const auto& i : parts) o << *i;
         o << "''";
     }
     virtual bool operator==(const base* o) const override {
@@ -154,8 +152,7 @@ struct ellipsis : public base {
     }
 };
 
-template <char op>
-struct unary_expression : public base {
+template <char op> struct unary_expression : public base {
     explicit unary_expression(std::unique_ptr<base>&& value)
         : base(), value(std::move(value)) {}
     virtual void stream(std::ostream& o) const override { o << op << value; }
@@ -181,8 +178,7 @@ struct dollar_curly : public unary_expression<'$'> {
     }
 };
 
-template <char... op>
-struct binary_expression : public base {
+template <char... op> struct binary_expression : public base {
     explicit binary_expression(std::unique_ptr<base>&& lhs,
                                std::unique_ptr<base>&& rhs)
         : base(), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
@@ -263,11 +259,8 @@ struct binding_inherit : public base {
         : base(), from(std::move(from)), attrs(std::move(attrs)){};
     virtual void stream(std::ostream& o) const override {
         o << "inherit";
-        if(from) {
-            o << " (" << from << ")";
-        }
-        for(const auto& i : attrs)
-            o << " " << *i;
+        if(from) { o << " (" << from << ")"; }
+        for(const auto& i : attrs) o << " " << *i;
     }
     virtual bool operator==(const base* o) const override {
         auto cast = dynamic_cast<const binding_inherit*>(o);
@@ -281,8 +274,7 @@ struct binds : public base {
     explicit binds(std::vector<std::unique_ptr<ast::base>>&& data)
         : base(), data(std::move(data)){};
     virtual void stream(std::ostream& o) const override {
-        for(const auto& i : data)
-            o << i << "; ";
+        for(const auto& i : data) o << i << "; ";
     }
     virtual bool operator==(const base* o) const override {
         auto cast = dynamic_cast<const binds*>(o);
@@ -295,8 +287,7 @@ struct formal : public binary_expression<'?'> {
     using binary_expression<'?'>::binary_expression;
     virtual void stream(std::ostream& o) const override {
         o << lhs;
-        if(rhs)
-            o << " ? " << rhs;
+        if(rhs) o << " ? " << rhs;
     }
 };
 
@@ -306,10 +297,8 @@ struct formals : public base {
     virtual void stream(std::ostream& o) const override {
         o << "{";
         auto i = data.cbegin();
-        if(i != data.cend())
-            o << " " << *i++;
-        while(i != data.cend())
-            o << ", " << *i++;
+        if(i != data.cend()) o << " " << *i++;
+        while(i != data.cend()) o << ", " << *i++;
         o << " }";
     }
     virtual bool operator==(const base* o) const override {
@@ -323,8 +312,7 @@ struct table : public base {
     explicit table(std::unique_ptr<ast::base>&& data, bool recursive)
         : binds(std::move(data)), recursive(recursive) {}
     virtual void stream(std::ostream& o) const override {
-        if(recursive)
-            o << "rec ";
+        if(recursive) o << "rec ";
         o << "{ " << binds << "}";
     }
     virtual bool operator==(const base* o) const override {
@@ -340,8 +328,7 @@ struct array : public base {
         : base(), data(std::move(data)){};
     virtual void stream(std::ostream& o) const override {
         o << "[ ";
-        for(const auto& i : data)
-            o << *i << " ";
+        for(const auto& i : data) o << *i << " ";
         o << "]";
     }
     virtual bool operator==(const base* o) const override {
@@ -459,8 +446,7 @@ struct long_string : any_string {
     }
 };
 
-template <typename T>
-struct binary_expression : base {
+template <typename T> struct binary_expression : base {
     void success(base& in_result) {
         assert(in_result.value);
         assert(value);
@@ -609,10 +595,8 @@ struct string : pegtl::sor<short_string, long_string> {};
 struct sep : pegtl::sor<pegtl::ascii::space, comment> {};
 struct seps : pegtl::star<sep> {};
 
-template <typename R>
-struct pad : pegtl::pad<R, sep> {};
-template <typename R>
-struct padr : pegtl::seq<R, seps> {};
+template <typename R> struct pad : pegtl::pad<R, sep> {};
+template <typename R> struct padr : pegtl::seq<R, seps> {};
 
 template <typename S, typename O, typename P = S>
 struct left_assoc : pegtl::seq<S, pegtl::star<pegtl::if_must<O, P>>> {};
@@ -732,8 +716,7 @@ struct attrpath_apply : pegtl::if_must<padr<pegtl::one<'.'>>, padr<attrtail>> {
 };
 struct attrpath : pegtl::seq<padr<attr>, pegtl::star<attrpath_apply>> {};
 
-template <typename CTX = void>
-struct expression;
+template <typename CTX = void> struct expression;
 
 struct formal_apply : pegtl::if_must<padr<pegtl::one<'?'>>, expression<>> {};
 struct formal : pegtl::seq<padr<name>, pegtl::opt<formal_apply>> {};
@@ -767,8 +750,7 @@ struct arguments : pegtl::sor<argument_set_postbind, argument_prebind> {};
 
 struct bind;
 
-template <typename U>
-struct binds : pegtl::until<U, bind> {};
+template <typename U> struct binds : pegtl::until<U, bind> {};
 
 struct table_begin_recursive
     : pegtl::seq<keyword::key_rec, padr<pegtl::one<'{'>>> {};
@@ -943,8 +925,7 @@ struct expr_if : pegtl::if_must<keyword::key_if, expr_if_apply<CTX>> {};
 // padr<pegtl::sor<path, spath, string, name, expr_select>>,
 // pegtl::opt<expr_applying<expr_applying_tail>>> {};
 
-template <typename CTX>
-struct assert_apply : expression<CTX> {};
+template <typename CTX> struct assert_apply : expression<CTX> {};
 template <typename CTX>
 struct assert : pegtl::if_must<keyword::key_assert,
                                expression<boolean>,
@@ -952,23 +933,20 @@ struct assert : pegtl::if_must<keyword::key_assert,
                                assert_apply<CTX>> {};
 
 // todo: restrict context?
-template <typename CTX>
-struct with_apply : expression<CTX> {};
+template <typename CTX> struct with_apply : expression<CTX> {};
 template <typename CTX>
 struct with : pegtl::if_must<keyword::key_with,
                              expression<>,
                              padr<pegtl::one<';'>>,
                              with_apply<CTX>> {};
 
-template <typename CTX>
-struct let_apply : expression<CTX> {};
+template <typename CTX> struct let_apply : expression<CTX> {};
 template <typename CTX>
 struct let
     : pegtl::if_must<keyword::key_let, binds<keyword::key_in>, let_apply<CTX>> {
 };
 
-template <typename CTX>
-struct function_apply;
+template <typename CTX> struct function_apply;
 template <typename CTX>
 struct function : pegtl::if_must<arguments, function_apply<CTX>> {};
 
@@ -990,63 +968,52 @@ template <>
 struct expression<table>
     : pegtl::sor<statement<table>, expr_if<table>, expr_merge> {};
 
-template <typename CTX>
-struct function_apply : expression<CTX> {};
+template <typename CTX> struct function_apply : expression<CTX> {};
 
 struct grammar : pegtl::must<seps, expression<>, pegtl::eof> {};
 
 struct control {
-    template <typename Rule>
-    struct normal : pegtl::normal<Rule> {};
+    template <typename Rule> struct normal : pegtl::normal<Rule> {};
 };
 
-template <typename Rule>
-struct action : pegtl::nothing<Rule> {};
+template <typename Rule> struct action : pegtl::nothing<Rule> {};
 
 namespace actions {
-template <typename Rule>
-struct binds : action<Rule> {};
+template <typename Rule> struct binds : action<Rule> {};
 
-template <>
-struct binds<bind_inherit_attrname> {
+template <> struct binds<bind_inherit_attrname> {
     template <typename Input>
     static void apply(const Input& in, state::binding_inherit& state) {
         state.push_back();
     }
 };
 
-template <>
-struct binds<bind_inherit_from> {
+template <> struct binds<bind_inherit_from> {
     template <typename Input>
     static void apply(const Input& in, state::binding_inherit& state) {
         state.set_from();
     }
 };
 
-template <>
-struct binds<bind> {
+template <> struct binds<bind> {
     template <typename Input>
     static void apply(const Input& in, state::binds& state) {
         state.push_back();
     }
 };
 
-template <typename Rule>
-struct array : action<Rule> {};
+template <typename Rule> struct array : action<Rule> {};
 
-template <>
-struct array<array_content_apply> {
+template <> struct array<array_content_apply> {
     template <typename Input>
     static void apply(const Input& in, state::array& state) {
         state.push_back();
     }
 };
 
-template <typename Rules>
-struct formals : action<Rules> {};
+template <typename Rules> struct formals : action<Rules> {};
 
-template <>
-struct formals<keyword::key_ellipsis> {
+template <> struct formals<keyword::key_ellipsis> {
     template <typename Input>
     static void apply(const Input& in, state::formals& state) {
         state.value = std::make_unique<ast::ellipsis>();
@@ -1054,35 +1021,30 @@ struct formals<keyword::key_ellipsis> {
     }
 };
 
-template <>
-struct formals<formal> {
+template <> struct formals<formal> {
     template <typename Input>
     static void apply(const Input& in, state::formals& state) {
         state.push_back();
     }
 };
 
-template <typename Rules>
-struct if_then_else : action<Rules> {};
+template <typename Rules> struct if_then_else : action<Rules> {};
 
-template <>
-struct if_then_else<keyword::key_then> {
+template <> struct if_then_else<keyword::key_then> {
     template <typename Input>
     static void apply(const Input& in, state::if_then_else& state) {
         state.set_test();
     }
 };
 
-template <>
-struct if_then_else<keyword::key_else> {
+template <> struct if_then_else<keyword::key_else> {
     template <typename Input>
     static void apply(const Input& in, state::if_then_else& state) {
         state.set_then();
     }
 };
 
-template <typename Rules>
-struct string : pegtl::nothing<Rules> {};
+template <typename Rules> struct string : pegtl::nothing<Rules> {};
 
 // template<> struct string<short_string_escaped> :
 // pegtl::unescape::unescape_c<short_string_escaped,
@@ -1092,16 +1054,14 @@ struct string<short_string_escaped>
 template <>
 struct string<short_string_accepted> : pegtl::unescape::append_all {};
 
-template <>
-struct string<short_string_content> {
+template <> struct string<short_string_content> {
     template <typename Input>
     static void apply(const Input& in, state::string& state) {
         state.push_back();
     }
 };
 
-template <>
-struct string<dollarcurly_expr> {
+template <> struct string<dollarcurly_expr> {
     template <typename Input>
     static void apply(const Input& in, state::any_string& state) {
         state.push_back_expr();
@@ -1113,8 +1073,7 @@ struct string<long_string_escape_accepted> : pegtl::unescape::append_all {};
 template <>
 struct string<long_string_accepted> : pegtl::unescape::append_all {};
 
-template <>
-struct string<long_string_content> {
+template <> struct string<long_string_content> {
     template <typename Input>
     static void apply(const Input& in, state::long_string& state) {
         state.push_back();
@@ -1279,8 +1238,7 @@ struct control::normal<long_string_content>
 //    template<typename x> struct control::normal<backtrack<x>> :
 //    pegtl::normal<backtrack<x>> {};
 
-template <typename Rule>
-struct errors : pegtl::normal<Rule> {
+template <typename Rule> struct errors : pegtl::normal<Rule> {
     static const std::string error_message;
     template <typename Input, typename... States>
     static void raise(const Input& in, States&&...) {
@@ -1288,8 +1246,7 @@ struct errors : pegtl::normal<Rule> {
     }
 };
 
-template <>
-struct action<do_backtrack> {
+template <> struct action<do_backtrack> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         // XXX assert state.value to find superfluous backtrackings
@@ -1297,8 +1254,7 @@ struct action<do_backtrack> {
     }
 };
 
-template <>
-struct action<number> {
+template <> struct action<number> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
@@ -1306,8 +1262,7 @@ struct action<number> {
     }
 };
 
-template <>
-struct action<name> {
+template <> struct action<name> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
@@ -1315,8 +1270,7 @@ struct action<name> {
     }
 };
 
-template <>
-struct action<path> {
+template <> struct action<path> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
@@ -1324,8 +1278,7 @@ struct action<path> {
     }
 };
 
-template <>
-struct action<keyword::key_true> {
+template <> struct action<keyword::key_true> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
@@ -1333,8 +1286,7 @@ struct action<keyword::key_true> {
     }
 };
 
-template <>
-struct action<keyword::key_false> {
+template <> struct action<keyword::key_false> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
@@ -1342,8 +1294,7 @@ struct action<keyword::key_false> {
     }
 };
 
-template <>
-struct action<expr_not_val> {
+template <> struct action<expr_not_val> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(state.value);
@@ -1351,8 +1302,7 @@ struct action<expr_not_val> {
     }
 };
 
-template <>
-struct action<expr_negate_val> {
+template <> struct action<expr_negate_val> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(state.value);
@@ -1360,8 +1310,7 @@ struct action<expr_negate_val> {
     }
 };
 
-template <>
-struct action<table_apply<table_begin_nonrecursive>> {
+template <> struct action<table_apply<table_begin_nonrecursive>> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(state.value);
@@ -1370,8 +1319,7 @@ struct action<table_apply<table_begin_nonrecursive>> {
     }
 };
 
-template <>
-struct action<table_apply<table_begin_recursive>> {
+template <> struct action<table_apply<table_begin_recursive>> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(state.value);

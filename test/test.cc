@@ -6,9 +6,9 @@
  */
 #include "catch.hpp"
 
-#include "expr.hh"
-#include <iostream>
 #include <pegtl/analyze.hh>
+#include <iostream>
+#include "expr.hh"
 
 using namespace std::literals;
 
@@ -36,8 +36,7 @@ bool parse(Str&& str, Args&&... args) {
     }
 }
 
-template <typename R>
-R compare(nix::parser::state::base& state) {
+template <typename R> R compare(nix::parser::state::base& state) {
     std::stringstream s;
     s << state.value;
     R r;
@@ -45,8 +44,7 @@ R compare(nix::parser::state::base& state) {
     return r;
 }
 
-template <>
-std::string compare(nix::parser::state::base& state) {
+template <> std::string compare(nix::parser::state::base& state) {
     std::stringstream s;
     s << state.value;
     return s.str();
@@ -72,18 +70,15 @@ R compare_downcast(nix::parser::state::base& state) {
     return downcast->data;
 }
 
-template <>
-int compare(nix::parser::state::base& state) {
+template <> int compare(nix::parser::state::base& state) {
     return compare_downcast<int, nix::ast::number>(state);
 }
 
-template <>
-bool compare(nix::parser::state::base& state) {
+template <> bool compare(nix::parser::state::base& state) {
     return compare_downcast<bool, nix::ast::boolean>(state);
 }
 
-template <typename S, typename R>
-void check(S&& str, const R& expect) {
+template <typename S, typename R> void check(S&& str, const R& expect) {
     SECTION(str) {
         nix::parser::state::base result;
         REQUIRE(parse(str, result));
@@ -91,10 +86,7 @@ void check(S&& str, const R& expect) {
     }
 }
 
-template <typename S>
-void check(S&& str) {
-    check<>(str, str);
-}
+template <typename S> void check(S&& str) { check<>(str, str); }
 
 #define CHECK_AST(expr, ast)                                                   \
     SECTION(expr) {                                                            \

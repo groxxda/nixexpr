@@ -12,8 +12,7 @@ int main(int argc, char** argv) {
 
     for(int i = 1; i < argc; i++) {
         nix::parser::state::base result;
-        if(getenv("DEBUG"))
-            ok = 0;
+        if(getenv("DEBUG")) ok = 0;
         // ok = pegtl::parse_file<nix::parser::grammar, pegtl::nothing,
         // nix::parser::control::tracer>(argv[i]);
         else
