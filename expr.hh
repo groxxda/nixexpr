@@ -583,11 +583,30 @@ struct expr_merge
     : pegtl::seq<expr_not, pegtl::star<binary_expr_apply<operator_merge>>> {};
 
 
-struct operators_ordering : padr<pegtl::sor<pegtl::string<'<', '='>,
-                                            pegtl::string<'>', '='>,
-                                            pegtl::one<'<', '>'>>> {};
+struct operator_gt : padr<pegtl::one<'>'>> {
+    using ast = ast::gt;
+    using next = expr_add;
+};
+struct operator_geq : padr<pegtl::string<'>', '='>> {
+    using ast = ast::geq;
+    using next = expr_add;
+};
+struct operator_lt : padr<pegtl::one<'<'>> {
+    using ast = ast::lt;
+    using next = expr_add;
+};
+struct operator_leq : padr<pegtl::string<'<', '='>> {
+    using ast = ast::leq;
+    using next = expr_add;
+};
+
 template <typename CTX>
-struct expr_ordering : left_assoc<expr_merge, operators_ordering, expr_add> {};
+struct expr_ordering : pegtl::seq<expr_merge,
+                                  pegtl::sor<binary_expr_apply<operator_geq>,
+                                             binary_expr_apply<operator_leq>,
+                                             binary_expr_apply<operator_gt>,
+                                             binary_expr_apply<operator_lt>,
+                                             pegtl::success>> {};
 
 struct operator_eq : padr<pegtl::string<'=', '='>> {
     using ast = ast::eq;

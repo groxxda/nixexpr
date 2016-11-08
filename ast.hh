@@ -227,6 +227,22 @@ struct neq : public binary_expression<'!', '='> {
     using binary_expression<'!', '='>::binary_expression;
 };
 
+struct gt : public binary_expression<'>'> {
+    using binary_expression<'>'>::binary_expression;
+};
+
+struct geq : public binary_expression<'>', '='> {
+    using binary_expression<'>', '='>::binary_expression;
+};
+
+struct lt : public binary_expression<'<'> {
+    using binary_expression<'<'>::binary_expression;
+};
+
+struct leq : public binary_expression<'<', '='> {
+    using binary_expression<'<', '='>::binary_expression;
+};
+
 struct attrtest : public binary_expression<'?'> {
     using binary_expression<'?'>::binary_expression;
 };

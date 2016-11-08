@@ -140,6 +140,22 @@ std::unique_ptr<nix::ast::base> neq(std::unique_ptr<nix::ast::base>&& lhs,
                                     std::unique_ptr<nix::ast::base>&& rhs) {
     return std::make_unique<nix::ast::neq>(std::move(lhs), std::move(rhs));
 }
+std::unique_ptr<nix::ast::base> gt(std::unique_ptr<nix::ast::base>&& lhs,
+                                   std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::gt>(std::move(lhs), std::move(rhs));
+}
+std::unique_ptr<nix::ast::base> geq(std::unique_ptr<nix::ast::base>&& lhs,
+                                    std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::geq>(std::move(lhs), std::move(rhs));
+}
+std::unique_ptr<nix::ast::base> lt(std::unique_ptr<nix::ast::base>&& lhs,
+                                   std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::lt>(std::move(lhs), std::move(rhs));
+}
+std::unique_ptr<nix::ast::base> leq(std::unique_ptr<nix::ast::base>&& lhs,
+                                    std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::leq>(std::move(lhs), std::move(rhs));
+}
 std::unique_ptr<nix::ast::base> add(std::unique_ptr<nix::ast::base>&& lhs,
                                     std::unique_ptr<nix::ast::base>&& rhs) {
     return std::make_unique<nix::ast::add>(std::move(lhs), std::move(rhs));
@@ -275,10 +291,17 @@ TEST_CASE("boolean expression") {
                    or_(and_(and_(1_b, 1_b), 1_b), and_(1_b, 1_b))));
 }
 
-TEST_CASE("comparison") {
+TEST_CASE("equal compare") {
     CHECK_AST("1 == 1", eq(1_n, 1_n));
     CHECK_AST("[] == 1", eq(array(), 1_n));
     CHECK_AST("true != false", neq(1_b, 0_b));
+}
+
+TEST_CASE("order compare") {
+    CHECK_AST("2 > 1", gt(2_n, 1_n));
+    CHECK_AST("1 >= 1", geq(1_n, 1_n));
+    CHECK_AST("1 < 2", lt(1_n, 2_n));
+    CHECK_AST("1 <= 1", leq(1_n, 1_n));
 }
 
 TEST_CASE("strings") {
