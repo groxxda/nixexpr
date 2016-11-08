@@ -92,12 +92,14 @@ struct if_then_else : base {
 
     void set_test() {
         assert(value);
+        assert(!test);
         test = std::move(value);
     }
 
     void set_then() {
         assert(test);
         assert(value);
+        assert(!then_expr);
         then_expr = std::move(value);
     }
 

@@ -42,6 +42,8 @@ inline std::ostream& operator<<(std::ostream& o,
 
 inline bool operator==(const std::unique_ptr<base>& a,
                        const std::unique_ptr<base>& b) {
+    if (!a) return !b;
+    if (!b) return false;
     return a->operator==(b.get());
 }
 
