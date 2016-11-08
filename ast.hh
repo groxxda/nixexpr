@@ -235,8 +235,23 @@ struct attrpath : public binary_expression<'.'> {
     using binary_expression<'.'>::binary_expression;
 };
 
-struct set_or : public binary_expression<'o', 'r'> {
-    using binary_expression<'o', 'r'>::binary_expression;
+struct lookup : public base {
+    explicit lookup(std::unique_ptr<ast::base>&& from, std::unique_ptr<ast::base>&& path,
+            std::unique_ptr<ast::base>&& or_) : from(std::move(from)),
+                    path(std::move(path)), or_(std::move(or_)){}
+
+    virtual void stream(std::ostream& o) const override {
+        o << from << "." << path;
+        if (or_) o << " or " << or_;
+    }
+    virtual bool operator==(const base* o) const override {
+        auto cast = dynamic_cast<const lookup*>(o);
+        return cast && from == cast->from && path == cast->path && or_ == cast->or_;
+    }
+
+    const std::unique_ptr<ast::base> from;
+    const std::unique_ptr<ast::base> path;
+    const std::unique_ptr<ast::base> or_;
 };
 
 struct call : public binary_expression<' '> {

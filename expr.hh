@@ -86,6 +86,23 @@ template <typename T> struct binary_expression : base {
     }
 };
 
+struct lookup : base {
+    std::unique_ptr<ast::base> path;
+
+    void set_path() {
+        assert(value);
+        assert(!path);
+        path = std::move(value);
+    }
+
+    void success(base& in_result) {
+        assert(in_result.value);
+        assert(path);
+        in_result.value = std::make_unique<ast::lookup>(
+            std::move(in_result.value), std::move(path), std::move(value));
+    }
+};
+
 struct if_then_else : base {
     std::unique_ptr<ast::base> test;
     std::unique_ptr<ast::base> then_expr;
@@ -444,10 +461,11 @@ struct bracket_expr
 
 struct variable_tail;
 
+struct expr_selectable : padr<pegtl::sor<table, bracket_expr, name>> {};
+
 struct expr_select
     : pegtl::seq<
-          pegtl::sor<table, bracket_expr, name>,
-          seps,
+          expr_selectable,
           pegtl::star<pegtl::seq<padr<pegtl::one<'.'>>, variable_tail>>> {};
 struct expr_simple : pegtl::sor<boolean,
                                 number,
@@ -459,32 +477,37 @@ struct expr_simple : pegtl::sor<boolean,
                                 uri> {};
 struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select> {};
 
-struct variable_tail_or_apply : expr_applying_tail {};
-struct variable_tail_or
-    : pegtl::if_must<keyword::key_or, variable_tail_or_apply> {};
-struct variable_tail : pegtl::seq<pegtl::sor<name, string, dollarcurly_expr>,
-                                  seps,
-                                  pegtl::opt<variable_tail_or>> {};
+template <typename simple = expr_simple> struct expr_simple_or_lookup;
+
+
+
+struct lookup_path : attrpath {};
+
+struct expr_lookup_apply
+    : pegtl::if_must<padr<pegtl::one<'.'>>,
+                     lookup_path,
+                     pegtl::opt<pegtl::if_must<keyword::key_or,
+                                               expr_simple_or_lookup<>>>> {};
+
+struct expr_lookup
+    : pegtl::seq<expr_selectable, pegtl::opt<expr_lookup_apply>> {};
+// XXX: reactivate CTX?
+template <typename simple>
+struct expr_simple_or_lookup
+    : pegtl::if_then_else<padr<simple>, pegtl::success, expr_lookup> {};
+
 
 // XXX reorder, this should be a few lines above near other array stuff
-struct array_content_apply : expr_applying_tail {};
-struct expr_applying
-    : pegtl::seq<expr_select,
-                 pegtl::star<pegtl::not_at<pegtl::one<';', ','>>,
-                             expr_applying_tail>> {};
-// XXX: reactivate CTX?
-template <typename CTX = void>
-struct expr_apply
-    : pegtl::if_then_else<padr<expr_simple>, pegtl::success, expr_applying> {};
+struct array_content_apply : expr_simple_or_lookup<> {};
 
 struct operator_negate_double : op_two<'-', '-', '>'> {};
 struct operator_negate : op_one<'-', '>'> {};
-struct expr_negate_val : expr_apply<number> {};
+struct expr_negate_val : expr_simple_or_lookup<number> {};
 template <typename CTX>
-struct expr_negate
-    : pegtl::seq<
-          pegtl::star<operator_negate_double>,
-          pegtl::if_must_else<operator_negate, expr_negate_val, expr_apply<>>> {
+struct expr_negate : pegtl::seq<pegtl::star<operator_negate_double>,
+                                pegtl::if_must_else<operator_negate,
+                                                    expr_negate_val,
+                                                    expr_simple_or_lookup<>>> {
 };
 // template<> struct expr_negate<number> : pegtl::seq<pegtl::star<op_one<'-',
 // '>'>>, expr_apply<number>> {};
@@ -501,7 +524,7 @@ struct expr_attrtest
 // XXX right assoc?
 struct operator_concat : padr<pegtl::two<'+'>> {
     using ast = ast::concat;
-    using next = expr_apply<array>;
+    using next = expr_simple_or_lookup<array>;
 };
 struct expr_concat
     : pegtl::seq<expr_attrtest,
@@ -546,7 +569,7 @@ struct expr_not
 // XXX: right assoc
 struct operator_merge : padr<pegtl::two<'/'>> {
     using ast = ast::merge;
-    using next = expr_apply<table>;
+    using next = expr_simple_or_lookup<table>;
 };
 struct expr_merge
     : pegtl::seq<expr_not, pegtl::star<binary_expr_apply<operator_merge>>> {};
@@ -782,6 +805,16 @@ template <> struct string<long_string_content> {
         state.push_back();
     }
 };
+
+
+template <typename Rules> struct lookup : action<Rules> {};
+
+template <> struct lookup<lookup_path> {
+    template <typename Input>
+    static void apply(const Input& in, state::lookup& state) {
+        state.set_path();
+    }
+};
 } // namespace actions
 
 template <typename x>
@@ -810,6 +843,13 @@ struct control::normal<binary_expr_apply<x>>
                                      pegtl::normal> {};
 
 template <>
+struct control::normal<expr_lookup_apply>
+    : pegtl::change_state_and_action<expr_lookup_apply,
+                                     state::lookup,
+                                     actions::lookup,
+                                     pegtl::normal> {};
+
+template <>
 struct control::normal<bind_inherit_apply>
     : pegtl::change_state<bind_inherit_apply,
                           state::binding_inherit,
@@ -818,11 +858,6 @@ template <>
 struct control::normal<expr_applying_tail>
     : pegtl::change_state<expr_applying_tail,
                           state::binary_expression<ast::call>,
-                          pegtl::normal> {};
-template <>
-struct control::normal<variable_tail_or_apply>
-    : pegtl::change_state<variable_tail_or_apply,
-                          state::binary_expression<ast::set_or>,
                           pegtl::normal> {};
 
 template <>

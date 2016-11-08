@@ -165,6 +165,13 @@ std::unique_ptr<nix::ast::base> merge(std::unique_ptr<nix::ast::base>&& lhs,
     return std::make_unique<nix::ast::merge>(std::move(lhs), std::move(rhs));
 }
 std::unique_ptr<nix::ast::base>
+lookup(std::unique_ptr<nix::ast::base>&& from,
+       std::unique_ptr<nix::ast::base>&& path,
+       std::unique_ptr<nix::ast::base>&& or_ = NULL) {
+    return std::make_unique<nix::ast::lookup>(std::move(from), std::move(path),
+                                              std::move(or_));
+}
+std::unique_ptr<nix::ast::base>
 attrtest(std::unique_ptr<nix::ast::base>&& lhs,
          std::unique_ptr<nix::ast::base>&& rhs) {
     return std::make_unique<nix::ast::attrtest>(std::move(lhs), std::move(rhs));
@@ -343,6 +350,14 @@ TEST_CASE("table") {
 
 TEST_CASE("table merge") {
     CHECK_AST("{ } // {}", merge(table({}), table({})));
+}
+
+TEST_CASE("table lookup") {
+    CHECK_AST("{}.a", lookup(table(false), "a"_n));
+    CHECK_AST("rec {}.a", lookup(table(true), "a"_n));
+    CHECK_AST("{}.a or b", lookup(table(false), "a"_n, "b"_n));
+    CHECK_AST("{}.a or {}.b or c",
+              lookup(table(false), "a"_n, lookup(table(false), "b"_n, "c"_n)));
 }
 
 TEST_CASE("attrtest") {
