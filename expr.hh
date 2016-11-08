@@ -401,16 +401,17 @@ struct argument_single
           padr<pegtl::sor<sep, pegtl::at<pegtl::one<'[', '(', '{', '!'>>>>> {};
 struct argument_formals
     : pegtl::seq<padr<pegtl::one<'{'>>, formals, pegtl::one<'}'>> {};
-struct argument_set_prebind
-    : pegtl::seq<pegtl::if_must<padr<pegtl::one<'@'>>, padr<argument_formals>>,
-                 padr<pegtl::one<':'>>> {};
+struct argument_set_prebind : padr<pegtl::one<'@'>> {
+    using ast = ast::named_formals;
+    using next = pegtl::seq<padr<argument_formals>, padr<pegtl::one<':'>>>;
+};
 struct argument_set_postbind
     : pegtl::sor<pegtl::seq<padr<argument_formals>,
                             pegtl::opt<padr<pegtl::one<'@'>>, padr<name>>,
                             padr<pegtl::one<':'>>>,
                  backtrack<argument_set_postbind>> {};
 struct argument_prebind : pegtl::seq<padr<name>,
-                                     pegtl::sor<argument_set_prebind,
+                                     pegtl::sor<binary_expr_apply<argument_set_prebind>,
                                                 argument_single,
                                                 backtrack<argument_prebind>>> {
 };

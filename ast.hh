@@ -336,6 +336,10 @@ struct formals : public base {
     const std::vector<std::unique_ptr<ast::base>> data;
 };
 
+struct named_formals : public binary_expression<'@'> {
+    using binary_expression<'@'>::binary_expression;
+};
+
 struct table : public base {
     explicit table(std::unique_ptr<ast::base>&& data, bool recursive)
         : binds(std::move(data)), recursive(recursive) {}
