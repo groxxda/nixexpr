@@ -114,7 +114,17 @@ struct path : public base {
     explicit path(const std::string&& in_data) : base(), data(in_data){};
     virtual void stream(std::ostream& o) const override { o << data; }
     virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const name*>(o);
+        auto cast = dynamic_cast<const path*>(o);
+        return cast && data == cast->data;
+    }
+    const std::string data;
+};
+
+struct spath : public base {
+    explicit spath(const std::string&& in_data) : base(), data(std::move(in_data)){};
+    virtual void stream(std::ostream& o) const override { o << "<" << data << ">"; }
+    virtual bool operator==(const base* o) const override {
+        auto cast = dynamic_cast<const spath*>(o);
         return cast && data == cast->data;
     }
     const std::string data;

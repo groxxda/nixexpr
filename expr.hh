@@ -968,6 +968,14 @@ template <> struct action<path> {
     }
 };
 
+template <> struct action<spath> {
+    template <typename Input>
+    static void apply(const Input& in, state::base& state) {
+        assert(!state.value);
+        state.value = std::make_unique<ast::spath>(in.string());
+    }
+};
+
 template <> struct action<keyword::key_true> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
