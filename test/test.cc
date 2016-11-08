@@ -164,6 +164,10 @@ std::unique_ptr<nix::ast::base> merge(std::unique_ptr<nix::ast::base>&& lhs,
                                       std::unique_ptr<nix::ast::base>&& rhs) {
     return std::make_unique<nix::ast::merge>(std::move(lhs), std::move(rhs));
 }
+std::unique_ptr<nix::ast::base> call(std::unique_ptr<nix::ast::base>&& lhs,
+                                     std::unique_ptr<nix::ast::base>&& rhs) {
+    return std::make_unique<nix::ast::call>(std::move(lhs), std::move(rhs));
+}
 std::unique_ptr<nix::ast::base>
 lookup(std::unique_ptr<nix::ast::base>&& from,
        std::unique_ptr<nix::ast::base>&& path,
@@ -370,6 +374,15 @@ TEST_CASE("attrtest") {
 TEST_CASE("function") {
     CHECK_AST("a: 1", function("a"_n, 1_n));
     CHECK_AST("a: b: 1", function("a"_n, function("b"_n, 1_n)));
+}
+
+TEST_CASE("function call") {
+    CHECK_AST("import \"abc.nix\"", call("import"_n, "abc.nix"_s));
+    CHECK_AST("(a: a) 1", call(function("a"_n, "a"_n), 1_n));
+    CHECK_AST(
+        "(a: b: a + b) 1 2",
+        call(call(function("a"_n, function("b"_n, add("a"_n, "b"_n))), 1_n),
+             2_n));
 }
 
 TEST_CASE("parameter list") {

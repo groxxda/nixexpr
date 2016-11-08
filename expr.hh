@@ -370,9 +370,9 @@ template <typename op>
 struct binary_expr_apply : pegtl::if_must<op, typename op::next> {};
 
 
-struct operator_attrpath : padr<pegtl::one<'.'>> {
+struct operator_attrpath : pegtl::seq<padr<pegtl::one<'.'>>, padr<attrtail>> {
     using ast = ast::attrpath;
-    using next = attrtail;
+    using next = pegtl::success;
 };
 struct attrpath
     : pegtl::seq<padr<attr>,
@@ -475,27 +475,35 @@ struct expr_simple : pegtl::sor<boolean,
                                 spath,
                                 path,
                                 uri> {};
-struct expr_applying_tail : pegtl::sor<padr<expr_simple>, expr_select> {};
 
 template <typename simple = expr_simple> struct expr_simple_or_lookup;
-
-
 
 struct lookup_path : attrpath {};
 
 struct expr_lookup_apply
-    : pegtl::if_must<padr<pegtl::one<'.'>>,
-                     lookup_path,
-                     pegtl::opt<pegtl::if_must<keyword::key_or,
-                                               expr_simple_or_lookup<>>>> {};
+    : pegtl::seq<padr<pegtl::one<'.'>>,
+                 lookup_path,
+                 pegtl::opt<pegtl::if_must<keyword::key_or,
+                                           expr_simple_or_lookup<>>>> {};
 
 struct expr_lookup
     : pegtl::seq<expr_selectable, pegtl::opt<expr_lookup_apply>> {};
+
+struct operator_call;
+
 // XXX: reactivate CTX?
 template <typename simple>
 struct expr_simple_or_lookup
-    : pegtl::if_then_else<padr<simple>, pegtl::success, expr_lookup> {};
+    : pegtl::if_then_else<
+          padr<simple>,
+          pegtl::success,
+          pegtl::seq<expr_lookup,
+                     pegtl::star<binary_expr_apply<operator_call>>>> {};
 
+struct operator_call : expr_simple_or_lookup<> {
+    using ast = ast::call;
+    using next = pegtl::success;
+};
 
 // XXX reorder, this should be a few lines above near other array stuff
 struct array_content_apply : expr_simple_or_lookup<> {};
@@ -854,11 +862,6 @@ struct control::normal<bind_inherit_apply>
     : pegtl::change_state<bind_inherit_apply,
                           state::binding_inherit,
                           pegtl::normal> {};
-template <>
-struct control::normal<expr_applying_tail>
-    : pegtl::change_state<expr_applying_tail,
-                          state::binary_expression<ast::call>,
-                          pegtl::normal> {};
 
 template <>
 struct control::normal<formals>
@@ -914,6 +917,18 @@ template <> struct action<number> {
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
         state.value = std::make_unique<ast::number>(std::stoll(in.string()));
+    }
+};
+
+template <> struct action<uri> {
+    template <typename Input>
+    static void apply(const Input& in, state::base& state) {
+        assert(!state.value);
+        std::vector<std::unique_ptr<ast::base>> vec;
+        auto lit =
+            std::make_unique<ast::string_literal>(std::move(in.string()));
+        vec.push_back(std::move(lit));
+        state.value = std::make_unique<ast::short_string>(std::move(vec));
     }
 };
 
