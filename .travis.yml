@@ -1,0 +1,41 @@
+language: generic
+
+cache:
+  apt: true
+
+matrix:
+  include:
+    - os: linux
+      compiler: clang
+      env: CXX=clang++-3.8
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.8
+          packages:
+            - clang-3.8
+            - autoconf-archive
+
+    - os: linux
+      compiler: gcc
+      env: CXX=g++-6
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-6
+            - autoconf-archive
+
+
+notifications:
+  email:
+    on_failure: change
+
+before_install:
+  - which $CXX
+  - ${CXX} --version
+
+script:
+  - autoreconf -i && ./configure && make V=1 && make check
