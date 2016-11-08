@@ -402,7 +402,7 @@ TEST_CASE("if then else") {
     CHECK_AST("if true then \"yes\" else \"false\"",
               if_then_else(boolean(true), "yes"_s, "false"_s));
 }
-
+/*
 TEST_CASE("complex") {
     check("let requiredVersion = import ./lib/minver.nix; in\n"
           "if ! builtins ? nixVersion || builtins.compareVersions "
@@ -414,3 +414,4 @@ TEST_CASE("complex") {
           "else\n"
           "  import ./pkgs/top-level/impure.nix"s);
 }
+*/
