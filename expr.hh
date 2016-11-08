@@ -349,10 +349,9 @@ struct attr : pegtl::sor<name, string, dollarcurly_expr> {};
 struct attrtail : pegtl::sor<name, string, dollarcurly_expr> {};
 
 
-template <typename op> struct binary_expr_start : op {};
 template <typename op>
-struct binary_expr_apply
-    : pegtl::if_must<binary_expr_start<op>, typename op::next> {};
+struct binary_expr_apply : pegtl::if_must<op, typename op::next> {};
+
 
 struct operator_attrpath : padr<pegtl::one<'.'>> {
     using ast = ast::attrpath;
@@ -948,6 +947,7 @@ template <> struct action<table_apply<table_begin_recursive>> {
             std::make_unique<ast::table>(std::move(state.value), true);
     }
 };
+
 
 //    template<> const std::string errors<expr_negate<number>>::error_message =
 //    "incomplete negate expression, expected number";
