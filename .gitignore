@@ -32,6 +32,7 @@ test-driver
 test-suite.log
 
 *.log
+*.trs
 *.o
 *.a
 
