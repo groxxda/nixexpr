@@ -36,5 +36,4 @@ test-suite.log
 *.a
 
 nixexpr
-test/test
-test/test.trs
+test/parser
