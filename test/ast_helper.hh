@@ -1,172 +1,139 @@
 #pragma once
 
-#include "ast.hh"
 #include <memory>
+#include "ast.hh"
 
 using namespace std::literals;
 
-std::unique_ptr<nix::ast::base> boolean(bool v) {
-    return std::make_unique<nix::ast::boolean>(v);
+nix::ast::node boolean(bool v) { return nix::ast::node(nix::ast::boolean(v)); }
+nix::ast::node operator""_b(unsigned long long v) {
+    return nix::ast::node(nix::ast::boolean(v));
 }
-std::unique_ptr<nix::ast::base> operator""_b(unsigned long long v) {
-    return std::make_unique<nix::ast::boolean>(v);
-}
-std::unique_ptr<nix::ast::base> string(std::string&& v) {
-    std::vector<std::unique_ptr<nix::ast::base>> vals;
-    vals.push_back(std::make_unique<nix::ast::string_literal>(std::move(v)));
+nix::ast::node string(std::string&& v) {
+    std::vector<nix::ast::node> vals;
+    vals.emplace_back(nix::ast::string_literal(std::move(v)));
 
-    return std::make_unique<nix::ast::short_string>(std::move(vals));
+    return nix::ast::node(nix::ast::short_string(std::move(vals)));
 }
-std::unique_ptr<nix::ast::base> long_string(std::string&& v,
-                                            unsigned long len) {
-    std::vector<std::unique_ptr<nix::ast::base>> vals;
-    vals.push_back(std::make_unique<nix::ast::string_literal>(std::move(v)));
+nix::ast::node long_string(std::string&& v, unsigned long len) {
+    std::vector<nix::ast::node> vals;
+    vals.emplace_back(nix::ast::string_literal(std::move(v)));
 
-    return std::make_unique<nix::ast::long_string>(std::move(vals),
+    return nix::ast::node(nix::ast::long_string(std::move(vals),
 
-                                                   len);
+                                                len));
 }
-std::unique_ptr<nix::ast::base> operator"" _s(const char* v, size_t len) {
+nix::ast::node operator"" _s(const char* v, size_t len) {
     return string(std::string(v, len));
 }
-std::unique_ptr<nix::ast::base> number(unsigned long long v) {
-    return std::make_unique<nix::ast::number>(v);
+nix::ast::node number(unsigned long long v) {
+    return nix::ast::node(nix::ast::number(v));
 }
-std::unique_ptr<nix::ast::base> operator"" _n(unsigned long long v) {
-    return number(v);
+nix::ast::node operator"" _n(unsigned long long v) { return number(v); }
+nix::ast::node name(std::string&& v) {
+    return nix::ast::node(nix::ast::name(std::move(v)));
 }
-std::unique_ptr<nix::ast::base> name(std::string&& v) {
-    return std::make_unique<nix::ast::name>(std::move(v));
-}
-std::unique_ptr<nix::ast::base> operator"" _n(const char* v, size_t len) {
+nix::ast::node operator"" _n(const char* v, size_t len) {
     return name(std::string(v, len));
 }
-std::unique_ptr<nix::ast::base> not_(std::unique_ptr<nix::ast::base>&& v) {
-    return std::make_unique<nix::ast::not_>(std::move(v));
+nix::ast::node not_(nix::ast::node&& v) {
+    return nix::ast::node(nix::ast::not_(std::move(v)));
 }
-std::unique_ptr<nix::ast::base> negate(std::unique_ptr<nix::ast::base>&& v) {
-    return std::make_unique<nix::ast::negate>(std::move(v));
+nix::ast::node negate(nix::ast::node&& v) {
+    return nix::ast::node(nix::ast::negate(std::move(v)));
 }
-std::unique_ptr<nix::ast::base> eq(std::unique_ptr<nix::ast::base>&& lhs,
-                                   std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::eq>(std::move(lhs), std::move(rhs));
+nix::ast::node eq(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::eq(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> neq(std::unique_ptr<nix::ast::base>&& lhs,
-                                    std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::neq>(std::move(lhs), std::move(rhs));
+nix::ast::node neq(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::neq(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> gt(std::unique_ptr<nix::ast::base>&& lhs,
-                                   std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::gt>(std::move(lhs), std::move(rhs));
+nix::ast::node gt(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::gt(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> geq(std::unique_ptr<nix::ast::base>&& lhs,
-                                    std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::geq>(std::move(lhs), std::move(rhs));
+nix::ast::node geq(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::geq(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> lt(std::unique_ptr<nix::ast::base>&& lhs,
-                                   std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::lt>(std::move(lhs), std::move(rhs));
+nix::ast::node lt(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::lt(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> leq(std::unique_ptr<nix::ast::base>&& lhs,
-                                    std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::leq>(std::move(lhs), std::move(rhs));
+nix::ast::node leq(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::leq(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> add(std::unique_ptr<nix::ast::base>&& lhs,
-                                    std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::add>(std::move(lhs), std::move(rhs));
+nix::ast::node add(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::add(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> sub(std::unique_ptr<nix::ast::base>&& lhs,
-                                    std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::sub>(std::move(lhs), std::move(rhs));
+nix::ast::node sub(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::sub(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> mul(std::unique_ptr<nix::ast::base>&& lhs,
-                                    std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::mul>(std::move(lhs), std::move(rhs));
+nix::ast::node mul(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::mul(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> div(std::unique_ptr<nix::ast::base>&& lhs,
-                                    std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::div>(std::move(lhs), std::move(rhs));
+nix::ast::node div(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::div(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> concat(std::unique_ptr<nix::ast::base>&& lhs,
-                                       std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::concat>(std::move(lhs), std::move(rhs));
+nix::ast::node concat(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::concat(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> merge(std::unique_ptr<nix::ast::base>&& lhs,
-                                      std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::merge>(std::move(lhs), std::move(rhs));
+nix::ast::node merge(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::merge(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> call(std::unique_ptr<nix::ast::base>&& lhs,
-                                     std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::call>(std::move(lhs), std::move(rhs));
+nix::ast::node call(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::call(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base>
-lookup(std::unique_ptr<nix::ast::base>&& from,
-       std::unique_ptr<nix::ast::base>&& path,
-       std::unique_ptr<nix::ast::base>&& or_ = NULL) {
-    return std::make_unique<nix::ast::lookup>(std::move(from), std::move(path),
-                                              std::move(or_));
+nix::ast::node lookup(nix::ast::node&& from, nix::ast::node&& path) {
+    return nix::ast::node(nix::ast::lookup(std::move(from), std::move(path)));
 }
-std::unique_ptr<nix::ast::base>
-attrtest(std::unique_ptr<nix::ast::base>&& lhs,
-         std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::attrtest>(std::move(lhs), std::move(rhs));
+nix::ast::node
+lookup(nix::ast::node&& from, nix::ast::node&& path, nix::ast::node&& or_) {
+    return nix::ast::node(
+        nix::ast::lookup_or(std::move(from), std::move(path), std::move(or_)));
 }
-std::unique_ptr<nix::ast::base>
-attrpath(std::unique_ptr<nix::ast::base>&& lhs,
-         std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::attrpath>(std::move(lhs), std::move(rhs));
+nix::ast::node attrtest(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::attrtest(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> or_(std::unique_ptr<nix::ast::base>&& lhs,
-                                    std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::or_>(std::move(lhs), std::move(rhs));
+nix::ast::node attrpath(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::attrpath(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> and_(std::unique_ptr<nix::ast::base>&& lhs,
-                                     std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::and_>(std::move(lhs), std::move(rhs));
+nix::ast::node or_(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::or_(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> impl(std::unique_ptr<nix::ast::base>&& lhs,
-                                     std::unique_ptr<nix::ast::base>&& rhs) {
-    return std::make_unique<nix::ast::impl>(std::move(lhs), std::move(rhs));
+nix::ast::node and_(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::and_(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base>
-assertion(std::unique_ptr<nix::ast::base>&& what,
-          std::unique_ptr<nix::ast::base>&& expr) {
-    return std::make_unique<nix::ast::assertion>(std::move(what),
-                                                 std::move(expr));
+nix::ast::node impl(nix::ast::node&& lhs, nix::ast::node&& rhs) {
+    return nix::ast::node(nix::ast::impl(std::move(lhs), std::move(rhs)));
 }
-std::unique_ptr<nix::ast::base> with(std::unique_ptr<nix::ast::base>&& what,
-                                     std::unique_ptr<nix::ast::base>&& expr) {
-    return std::make_unique<nix::ast::with>(std::move(what), std::move(expr));
+nix::ast::node assertion(nix::ast::node&& what, nix::ast::node&& expr) {
+    return nix::ast::node(
+        nix::ast::assertion(std::move(what), std::move(expr)));
 }
-std::unique_ptr<nix::ast::base>
-function(std::unique_ptr<nix::ast::base>&& arg,
-         std::unique_ptr<nix::ast::base>&& expr) {
-    return std::make_unique<nix::ast::function>(std::move(arg),
-                                                std::move(expr));
+nix::ast::node with(nix::ast::node&& what, nix::ast::node&& expr) {
+    return nix::ast::node(nix::ast::with(std::move(what), std::move(expr)));
 }
-std::unique_ptr<nix::ast::base> bind(std::unique_ptr<nix::ast::base>&& name,
-                                     std::unique_ptr<nix::ast::base>&& value) {
-    return std::make_unique<nix::ast::binding_eq>(std::move(name),
-                                                  std::move(value));
+nix::ast::node function(nix::ast::node&& arg, nix::ast::node&& expr) {
+    return nix::ast::node(nix::ast::function(std::move(arg), std::move(expr)));
 }
-template <typename... T> std::unique_ptr<nix::ast::base> array(T&&... values) {
-    std::unique_ptr<nix::ast::base> vals[] = {std::move(values)...};
-    std::vector<std::unique_ptr<nix::ast::base>> vec;
-    for(auto&& i : vals) vec.push_back(std::move(i));
-    return std::make_unique<nix::ast::array>(std::move(vec));
+nix::ast::node bind(nix::ast::node&& name, nix::ast::node&& value) {
+    return nix::ast::node(
+        nix::ast::binding_eq(std::move(name), std::move(value)));
 }
-template <typename... T>
-std::unique_ptr<nix::ast::base> table(bool recursive, T&&... binds) {
-    std::unique_ptr<nix::ast::base> vals[] = {std::move(binds)...};
-    std::vector<std::unique_ptr<nix::ast::base>> vec;
-    for(auto&& i : vals) vec.push_back(std::move(i));
-    return std::make_unique<nix::ast::table>(
-        std::make_unique<nix::ast::binds>(std::move(vec)), recursive);
+template <typename... T> nix::ast::node array(T&&... values) {
+    nix::ast::node vals[] = {std::move(values)...};
+    std::vector<nix::ast::node> vec;
+    for(auto&& i : vals) vec.emplace_back(std::move(i));
+    return nix::ast::node(nix::ast::array(std::move(vec)));
 }
-std::unique_ptr<nix::ast::base>
-if_then_else(std::unique_ptr<nix::ast::base>&& test,
-             std::unique_ptr<nix::ast::base>&& then_expr,
-             std::unique_ptr<nix::ast::base>&& else_expr) {
-    return std::make_unique<nix::ast::if_then_else>(
-        std::move(test), std::move(then_expr), std::move(else_expr));
+template <typename... T> nix::ast::node table(bool recursive, T&&... binds) {
+    nix::ast::node vals[] = {std::move(binds)...};
+    std::vector<nix::ast::node> vec;
+    for(auto&& i : vals) vec.emplace_back(std::move(i));
+    return nix::ast::node(nix::ast::table(
+        nix::ast::node(nix::ast::binds(std::move(vec))), recursive));
+}
+nix::ast::node if_then_else(nix::ast::node&& test,
+                            nix::ast::node&& then_expr,
+                            nix::ast::node&& else_expr) {
+    return nix::ast::node(nix::ast::if_then_else(
+        std::move(test), std::move(then_expr), std::move(else_expr)));
 }

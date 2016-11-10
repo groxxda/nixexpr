@@ -8,8 +8,8 @@
 
 #include <pegtl/analyze.hh>
 #include <iostream>
-#include "expr.hh"
 #include "ast_helper.hh"
+#include "expr.hh"
 
 bool parse_nocatch(const std::string& str, nix::parser::state::base& result) {
     bool res = nix::parser::parse_string(str, result);
@@ -33,7 +33,7 @@ bool parse(Str&& str, Args&&... args) {
 
 template <typename R> R compare(nix::parser::state::base& state) {
     std::stringstream s;
-    s << state.value;
+    s << *state.value;
     R r;
     s >> r;
     return r;
@@ -41,36 +41,10 @@ template <typename R> R compare(nix::parser::state::base& state) {
 
 template <> std::string compare(nix::parser::state::base& state) {
     std::stringstream s;
-    s << state.value;
+    s << *state.value;
     return s.str();
 }
 
-template <typename R, typename A>
-R compare_downcast(nix::parser::state::base& state) {
-    auto downcast = dynamic_cast<A*>(state.value.get());
-    if(!downcast) {
-        std::stringstream msg("expected ");
-        msg << typeid(A).name();
-        msg << ", but got type=";
-        if(state.value) {
-            auto& val_ = *state.value;
-            msg << typeid(val_).name();
-        } else
-            msg << "nullptr";
-        msg << " with value=";
-        msg << state.value;
-        throw msg.str();
-    }
-    return downcast->data;
-}
-
-template <> int compare(nix::parser::state::base& state) {
-    return compare_downcast<int, nix::ast::number>(state);
-}
-
-template <> bool compare(nix::parser::state::base& state) {
-    return compare_downcast<bool, nix::ast::boolean>(state);
-}
 
 template <typename S, typename R> void check(S&& str, const R& expect) {
     SECTION(str) {
@@ -86,9 +60,8 @@ template <typename S> void check(S&& str) { check<>(str, str); }
     SECTION(expr) {                                                            \
         nix::parser::state::base result;                                       \
         REQUIRE(parse(expr, result));                                          \
-        REQUIRE(ast == result.value);                                          \
+        REQUIRE(ast == *result.value);                                         \
     }
-
 
 
 #if 0

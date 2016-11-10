@@ -8,424 +8,445 @@
 namespace nix {
 
 namespace ast {
-struct base {
-    virtual void stream(std::ostream&) const = 0;
-    virtual bool operator==(const base* o) const {
-        return o && o->operator==(*this);
-    }
-    virtual bool operator==(const base& o) const {
-        std::stringstream msg;
-        msg << "don't know how to compare ";
-        msg << typeid(*this).name();
-        msg << ": ";
-        stream(msg);
-        msg << " and ";
-        msg << typeid(o).name();
-        msg << ": ";
-        o.stream(msg);
-        throw msg.str();
-    }
-    virtual ~base() = default;
+class node {
+    struct node_interface {
+        virtual ~node_interface() = default;
+        virtual void stream(std::ostream&) const = 0;
+        virtual bool operator==(const node_interface& o) const = 0;
+    };
 
-protected:
-    explicit base() {}
+    template <typename T> struct node_impl : node_interface {
+        node_impl(T t) : object(std::move(t)) {}
+        virtual ~node_impl() = default;
+        virtual void stream(std::ostream& o) const override {
+            object.stream(o);
+        }
+        virtual bool operator==(const node_interface& o) const override {
+            const node_impl<T>* oc = dynamic_cast<const node_impl<T>*>(&o);
+            if(!oc) return false;
+            return object == oc->object;
+        }
+
+    private:
+        const T object;
+    };
+
+    std::shared_ptr<node_interface> object;
+
+public:
+    template <typename T>
+    explicit node(const T& t) : object(new node_impl<T>(t)) {}
+    void stream(std::ostream& o) const { object->stream(o); }
+    bool operator==(const node& o) const { return *object == *o.object; }
 };
 
-inline std::ostream& operator<<(std::ostream& o, const base& b) {
+inline std::ostream& operator<<(std::ostream& o, const node& b) {
     b.stream(o);
     return o;
 }
 
-inline std::ostream& operator<<(std::ostream& o,
-                                const std::unique_ptr<base>& b) {
-    return b ? (o << *b) : (o << "NULL");
-}
-
-inline bool operator==(const std::unique_ptr<base>& a,
-                       const std::unique_ptr<base>& b) {
-    if (!a) return !b;
-    if (!b) return false;
-    return a->operator==(b.get());
-}
-
-struct number : public base {
-    explicit number(const uint64_t in_data) : base(), data(in_data){};
-    virtual void stream(std::ostream& o) const override { o << data; }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const number*>(o);
-        return cast && data == cast->data;
-    }
+struct number {
+    explicit number(const uint64_t in_data) : data(in_data){};
+    void stream(std::ostream& o) const { o << data; }
+    bool operator==(const number& o) const { return data == o.data; }
     const uint64_t data;
 };
 
-struct string_literal : public base {
-    explicit string_literal(std::string&& in_data)
-        : base(), data(std::move(in_data)){};
-    virtual void stream(std::ostream& o) const override { o << data; }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const string_literal*>(o);
-        return cast && data == cast->data;
-    }
+struct string_literal {
+    explicit string_literal(std::string&& in_data) : data(std::move(in_data)){};
+    bool operator==(const string_literal& o) const { return data == o.data; }
+    void stream(std::ostream& o) const { o << data; }
     const std::string data;
 };
 
-struct short_string : public base {
-    explicit short_string(std::vector<std::unique_ptr<ast::base>>&& parts)
-        : base(), parts(std::move(parts)){};
-    virtual void stream(std::ostream& o) const override {
+struct short_string {
+    explicit short_string(std::vector<ast::node>&& parts)
+        : parts(std::move(parts)){};
+    bool operator==(const short_string& o) const { return parts == o.parts; }
+    void stream(std::ostream& o) const {
         o << "\"";
-        for(const auto& i : parts) o << *i;
+        for(const auto& i : parts) o << i;
         o << "\"";
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const short_string*>(o);
-        return cast && parts == cast->parts;
-    }
-    const std::vector<std::unique_ptr<ast::base>> parts;
+    const std::vector<ast::node> parts;
 };
 
-struct long_string : public base {
-    explicit long_string(std::vector<std::unique_ptr<ast::base>>&& parts,
+struct long_string {
+    explicit long_string(std::vector<ast::node>&& parts,
                          const unsigned int prefixlen)
-        : base(), parts(std::move(parts)), prefixlen(prefixlen) {}
-    virtual void stream(std::ostream& o) const override {
+        : parts(std::move(parts)), prefixlen(prefixlen) {}
+    bool operator==(const long_string& o) const {
+        return prefixlen == o.prefixlen && parts == o.parts;
+    }
+    void stream(std::ostream& o) const {
         o << "''";
-        for(const auto& i : parts) o << *i;
+        for(const auto& i : parts) o << i;
         o << "''";
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const long_string*>(o);
-        return cast && parts == cast->parts;
-    }
-    const std::vector<std::unique_ptr<ast::base>> parts;
+    const std::vector<ast::node> parts;
     const unsigned int prefixlen;
 };
 
-struct name : public base {
-    explicit name(const std::string&& in_data) : base(), data(in_data){};
-    virtual void stream(std::ostream& o) const override { o << data; }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const name*>(o);
-        return cast && data == cast->data;
-    }
+struct name {
+    explicit name(const std::string&& in_data) : data(in_data){};
+    void stream(std::ostream& o) const { o << data; }
+    bool operator==(const name& o) const { return data == o.data; }
     const std::string data;
 };
 
-struct path : public base {
-    explicit path(const std::string&& in_data) : base(), data(in_data){};
-    virtual void stream(std::ostream& o) const override { o << data; }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const path*>(o);
-        return cast && data == cast->data;
-    }
+struct path {
+    explicit path(const std::string&& in_data) : data(in_data){};
+    void stream(std::ostream& o) const { o << data; }
+    bool operator==(const path& o) const { return data == o.data; }
     const std::string data;
 };
 
-struct spath : public base {
-    explicit spath(const std::string&& in_data) : base(), data(std::move(in_data)){};
-    virtual void stream(std::ostream& o) const override { o << "<" << data << ">"; }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const spath*>(o);
-        return cast && data == cast->data;
-    }
+struct spath {
+    explicit spath(const std::string&& in_data) : data(std::move(in_data)){};
+    void stream(std::ostream& o) const { o << "<" << data << ">"; }
+    bool operator==(const spath& o) const { return data == o.data; }
     const std::string data;
 };
 
-struct boolean : public base {
-    explicit boolean(const bool in_data) : base(), data(in_data){};
-    virtual void stream(std::ostream& o) const override {
-        o << std::boolalpha << data;
-    }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const boolean*>(o);
-        return cast && data == cast->data;
-    }
+struct boolean {
+    explicit boolean(const bool in_data) : data(in_data){};
+    bool operator==(const boolean& o) const { return data == o.data; }
+    void stream(std::ostream& o) const { o << std::boolalpha << data; }
     operator bool() const { return data; }
     const bool data;
 };
 
-struct ellipsis : public base {
-    explicit ellipsis() : base(){};
-    virtual void stream(std::ostream& o) const override { o << "..."; }
-    virtual bool operator==(const base* o) const override {
-        return dynamic_cast<const ellipsis*>(o);
-    }
+struct ellipsis {
+    explicit ellipsis(){};
+    void stream(std::ostream& o) const { o << "..."; }
+    bool operator==(const ellipsis& o) const { return true; }
 };
 
-template <char op> struct unary_expression : public base {
-    explicit unary_expression(std::unique_ptr<base>&& value)
-        : base(), value(std::move(value)) {}
-    virtual void stream(std::ostream& o) const override { o << op << value; }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const unary_expression<op>*>(o);
-        return cast && value == cast->value;
-    }
-    const std::unique_ptr<base> value;
+template <char op> struct unary_expression {
+    explicit unary_expression(ast::node&& value) : value(std::move(value)) {}
+    explicit unary_expression(std::unique_ptr<ast::node>&& ptr)
+        : value(*ptr.release()) {}
+    void stream(std::ostream& o) const { o << op << value; }
+    const ast::node value;
 };
 
 struct not_ : public unary_expression<'!'> {
     using unary_expression<'!'>::unary_expression;
+    bool operator==(const not_& o) const { return value == o.value; }
 };
 
 struct negate : public unary_expression<'-'> {
     using unary_expression<'-'>::unary_expression;
+    bool operator==(const negate& o) const { return value == o.value; }
 };
 
 struct dollar_curly : public unary_expression<'$'> {
     using unary_expression<'$'>::unary_expression;
-    virtual void stream(std::ostream& o) const override {
-        o << "${" << value << "}";
-    }
+    bool operator==(const dollar_curly& o) const { return value == o.value; }
+    void stream(std::ostream& o) const { o << "${" << value << "}"; }
 };
 
-template <char... op> struct binary_expression : public base {
-    explicit binary_expression(std::unique_ptr<base>&& lhs,
-                               std::unique_ptr<base>&& rhs)
-        : base(), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
-    virtual void stream(std::ostream& o) const override {
+template <char... op> struct binary_expression {
+    explicit binary_expression(ast::node&& lhs, ast::node&& rhs)
+        : lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+    explicit binary_expression(std::unique_ptr<ast::node>&& lhs,
+                               std::unique_ptr<ast::node>&& rhs)
+        : binary_expression<op...>(std::move(*lhs.release()),
+                                   std::move(*rhs.release())) {}
+    void stream(std::ostream& o) const {
         o << "(" << lhs;
         (o << ... << op) << rhs << ")";
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const binary_expression<op...>*>(o);
-        return cast && lhs == cast->lhs && rhs == cast->rhs;
-    }
-    const std::unique_ptr<base> lhs;
-    const std::unique_ptr<base> rhs;
+    const ast::node lhs;
+    const ast::node rhs;
 };
 
 struct add : public binary_expression<'+'> {
     using binary_expression<'+'>::binary_expression;
+    bool operator==(const add& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct sub : public binary_expression<'-'> {
     using binary_expression<'-'>::binary_expression;
+    bool operator==(const sub& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct mul : public binary_expression<'*'> {
     using binary_expression<'*'>::binary_expression;
+    bool operator==(const mul& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct div : public binary_expression<'/'> {
     using binary_expression<'/'>::binary_expression;
+    bool operator==(const div& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct or_ : public binary_expression<'|', '|'> {
     using binary_expression<'|', '|'>::binary_expression;
+    bool operator==(const or_& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct and_ : public binary_expression<'&', '&'> {
     using binary_expression<'&', '&'>::binary_expression;
+    bool operator==(const and_& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
+    }
 };
 
 struct impl : public binary_expression<'-', '>'> {
     using binary_expression<'-', '>'>::binary_expression;
+    bool operator==(const impl& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
+    }
 };
 
 struct concat : public binary_expression<'+', '+'> {
     using binary_expression<'+', '+'>::binary_expression;
+    bool operator==(const concat& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
+    }
 };
 
 struct merge : public binary_expression<'/', '/'> {
     using binary_expression<'/', '/'>::binary_expression;
+    bool operator==(const merge& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
+    }
 };
 
 struct eq : public binary_expression<'=', '='> {
     using binary_expression<'=', '='>::binary_expression;
+    bool operator==(const eq& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct neq : public binary_expression<'!', '='> {
     using binary_expression<'!', '='>::binary_expression;
+    bool operator==(const neq& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct gt : public binary_expression<'>'> {
     using binary_expression<'>'>::binary_expression;
+    bool operator==(const gt& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct geq : public binary_expression<'>', '='> {
     using binary_expression<'>', '='>::binary_expression;
+    bool operator==(const geq& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct lt : public binary_expression<'<'> {
     using binary_expression<'<'>::binary_expression;
+    bool operator==(const lt& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct leq : public binary_expression<'<', '='> {
     using binary_expression<'<', '='>::binary_expression;
+    bool operator==(const leq& o) const { return lhs == o.lhs && rhs == o.rhs; }
 };
 
 struct attrtest : public binary_expression<'?'> {
     using binary_expression<'?'>::binary_expression;
+    bool operator==(const attrtest& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
+    }
 };
 
 struct attrpath : public binary_expression<'.'> {
     using binary_expression<'.'>::binary_expression;
+    bool operator==(const attrpath& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
+    }
 };
 
-struct lookup : public base {
-    explicit lookup(std::unique_ptr<ast::base>&& from, std::unique_ptr<ast::base>&& path,
-            std::unique_ptr<ast::base>&& or_) : from(std::move(from)),
-                    path(std::move(path)), or_(std::move(or_)){}
-
-    virtual void stream(std::ostream& o) const override {
-        o << from << "." << path;
-        if (or_) o << " or " << or_;
+struct lookup : public binary_expression<'.'> {
+    using binary_expression<'.'>::binary_expression;
+    bool operator==(const lookup& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const lookup*>(o);
-        return cast && from == cast->from && path == cast->path && or_ == cast->or_;
+};
+
+struct lookup_or {
+    explicit lookup_or(ast::node&& from, ast::node&& path, ast::node&& or_)
+        : from(std::move(from)), path(std::move(path)), or_(std::move(or_)) {}
+    explicit lookup_or(std::unique_ptr<ast::node>&& from,
+                       std::unique_ptr<ast::node>&& path,
+                       std::unique_ptr<ast::node>&& or_)
+        : lookup_or(std::move(*from.release()),
+                    std::move(*path.release()),
+                    std::move(*or_.release())) {}
+
+    void stream(std::ostream& o) const {
+        o << from << "." << path << " or " << or_;
+    }
+    bool operator==(const lookup_or& o) const {
+        return from == o.from && path == o.path && from == o.from;
     }
 
-    const std::unique_ptr<ast::base> from;
-    const std::unique_ptr<ast::base> path;
-    const std::unique_ptr<ast::base> or_;
+    const ast::node from;
+    const ast::node path;
+    const ast::node or_;
 };
 
 struct call : public binary_expression<' '> {
     using binary_expression<' '>::binary_expression;
+    bool operator==(const call& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
+    }
 };
 
 struct binding_eq : public binary_expression<'='> {
     using binary_expression<'='>::binary_expression;
-    virtual void stream(std::ostream& o) const override {
-        o << lhs << " = " << rhs;
+    bool operator==(const binding_eq& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
     }
+    void stream(std::ostream& o) const { o << lhs << " = " << rhs; }
 };
 
-struct binding_inherit : public base {
-    explicit binding_inherit(std::unique_ptr<ast::base>&& from,
-                             std::vector<std::unique_ptr<ast::base>>&& attrs)
-        : base(), from(std::move(from)), attrs(std::move(attrs)){};
-    virtual void stream(std::ostream& o) const override {
+struct binding_inherit {
+    explicit binding_inherit(std::vector<ast::node>&& attrs)
+        : attrs(std::move(attrs)){};
+    bool operator==(const binding_inherit& o) const { return attrs == o.attrs; }
+    void stream(std::ostream& o) const {
         o << "inherit";
-        if(from) { o << " (" << from << ")"; }
-        for(const auto& i : attrs) o << " " << *i;
+        for(const auto& i : attrs) o << " " << i;
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const binding_inherit*>(o);
-        return cast && from == cast->from && attrs == cast->attrs;
-    }
-    const std::unique_ptr<ast::base> from;
-    const std::vector<std::unique_ptr<ast::base>> attrs;
+    const std::vector<ast::node> attrs;
 };
 
-struct binds : public base {
-    explicit binds(std::vector<std::unique_ptr<ast::base>>&& data)
-        : base(), data(std::move(data)){};
-    virtual void stream(std::ostream& o) const override {
+struct binding_inherit_from {
+    explicit binding_inherit_from(ast::node&& from,
+                                  std::vector<ast::node>&& attrs)
+        : from(std::move(from)), attrs(std::move(attrs)){};
+    explicit binding_inherit_from(std::unique_ptr<ast::node>&& from,
+                                  std::vector<ast::node>&& attrs)
+        : binding_inherit_from(std::move(*from.release()), std::move(attrs)) {}
+    bool operator==(const binding_inherit_from& o) const {
+        return from == o.from && attrs == o.attrs;
+    }
+    void stream(std::ostream& o) const {
+        o << "inherit (" << from << ")";
+        for(const auto& i : attrs) o << " " << i;
+    }
+    const ast::node from;
+    const std::vector<ast::node> attrs;
+};
+
+struct binds {
+    explicit binds(std::vector<ast::node>&& data) : data(std::move(data)){};
+    bool operator==(const binds& o) const { return data == o.data; }
+    void stream(std::ostream& o) const {
         for(const auto& i : data) o << i << "; ";
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const binds*>(o);
-        return cast && data == cast->data;
-    }
-    const std::vector<std::unique_ptr<ast::base>> data;
+    const std::vector<ast::node> data;
 };
 
 struct formal : public binary_expression<'?'> {
     using binary_expression<'?'>::binary_expression;
-    virtual void stream(std::ostream& o) const override {
-        o << lhs;
-        if(rhs) o << " ? " << rhs;
+    bool operator==(const formal& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
     }
+    void stream(std::ostream& o) const { o << lhs << " ? " << rhs; }
 };
 
-struct formals : public base {
-    explicit formals(std::vector<std::unique_ptr<ast::base>>&& data)
-        : base(), data(std::move(data)) {}
-    virtual void stream(std::ostream& o) const override {
+struct formals {
+    explicit formals(std::vector<ast::node>&& data) : data(std::move(data)) {}
+    bool operator==(const formals& o) const { return data == o.data; }
+    void stream(std::ostream& o) const {
         o << "{";
         auto i = data.cbegin();
         if(i != data.cend()) o << " " << *i++;
         while(i != data.cend()) o << ", " << *i++;
         o << " }";
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const formals*>(o);
-        return cast && data == cast->data;
-    }
-    const std::vector<std::unique_ptr<ast::base>> data;
+    const std::vector<ast::node> data;
 };
 
 struct named_formals : public binary_expression<'@'> {
     using binary_expression<'@'>::binary_expression;
+    bool operator==(const named_formals& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
+    }
 };
 
-struct table : public base {
-    explicit table(std::unique_ptr<ast::base>&& data, bool recursive)
+struct table {
+    explicit table(ast::node&& data, bool recursive)
         : binds(std::move(data)), recursive(recursive) {}
-    virtual void stream(std::ostream& o) const override {
+    explicit table(std::unique_ptr<ast::node>&& data, bool recursive)
+        : table(std::move(*data.release()), recursive) {}
+    bool operator==(const table& o) const {
+        return binds == o.binds && recursive == o.recursive;
+    }
+    void stream(std::ostream& o) const {
         if(recursive) o << "rec ";
         o << "{ " << binds << "}";
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const table*>(o);
-        return cast && recursive == cast->recursive && binds == cast->binds;
-    }
-    const std::unique_ptr<ast::base> binds;
+    const ast::node binds;
     const bool recursive;
 };
 
-struct array : public base {
-    explicit array(std::vector<std::unique_ptr<ast::base>>&& data)
-        : base(), data(std::move(data)){};
-    virtual void stream(std::ostream& o) const override {
+struct array {
+    explicit array(std::vector<ast::node>&& data) : data(std::move(data)){};
+    bool operator==(const array& o) const { return data == o.data; }
+    void stream(std::ostream& o) const {
         o << "[ ";
-        for(const auto& i : data) o << *i << " ";
+        for(const auto& i : data) o << i << " ";
         o << "]";
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const array*>(o);
-        return cast && data == cast->data;
-    }
-    const std::vector<std::unique_ptr<ast::base>> data;
+    const std::vector<ast::node> data;
 };
 
 struct let : public binary_expression<'l', 'e', 't'> {
     using binary_expression<'l', 'e', 't'>::binary_expression;
-    virtual void stream(std::ostream& o) const override {
-        o << "let " << lhs << "in " << rhs;
-    }
+    bool operator==(const let& o) const { return lhs == o.lhs && rhs == o.rhs; }
+    void stream(std::ostream& o) const { o << "let " << lhs << "in " << rhs; }
 };
 
 struct function : public binary_expression<'f', 'u', 'n'> {
     using binary_expression<'f', 'u', 'n'>::binary_expression;
-    virtual void stream(std::ostream& o) const override {
-        o << lhs << ": " << rhs;
+    bool operator==(const function& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
     }
+    void stream(std::ostream& o) const { o << lhs << ": " << rhs; }
 };
 
 struct assertion : public binary_expression<'a', 's', 's', 'e', 'r', 't'> {
     using binary_expression<'a', 's', 's', 'e', 'r', 't'>::binary_expression;
-    virtual void stream(std::ostream& o) const override {
-        o << "assert " << lhs << "; " << rhs;
+    bool operator==(const assertion& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
     }
+    void stream(std::ostream& o) const { o << "assert " << lhs << "; " << rhs; }
 };
 
 struct with : public binary_expression<'w', 'i', 't', 'h'> {
     using binary_expression<'w', 'i', 't', 'h'>::binary_expression;
-    virtual void stream(std::ostream& o) const override {
-        o << "with " << lhs << "; " << rhs;
+    bool operator==(const with& o) const {
+        return lhs == o.lhs && rhs == o.rhs;
     }
+    void stream(std::ostream& o) const { o << "with " << lhs << "; " << rhs; }
 };
 
-struct if_then_else : public base {
-    explicit if_then_else(std::unique_ptr<ast::base>&& test,
-                          std::unique_ptr<ast::base>&& then_expr,
-                          std::unique_ptr<ast::base>&& else_expr)
-        : base(), test(std::move(test)), then_expr(std::move(then_expr)),
+struct if_then_else {
+    explicit if_then_else(ast::node&& test,
+                          ast::node&& then_expr,
+                          ast::node&& else_expr)
+        : test(std::move(test)), then_expr(std::move(then_expr)),
           else_expr(std::move(else_expr)) {}
-    virtual void stream(std::ostream& o) const override {
+    explicit if_then_else(std::unique_ptr<ast::node>&& test,
+                          std::unique_ptr<ast::node>&& then_expr,
+                          std::unique_ptr<ast::node>&& else_expr)
+        : if_then_else(std::move(*test.release()),
+                       std::move(*then_expr.release()),
+                       std::move(*else_expr.release())) {}
+    bool operator==(const if_then_else& o) const {
+        return test == o.test && then_expr == o.then_expr &&
+               else_expr == o.else_expr;
+    }
+    void stream(std::ostream& o) const {
         o << "if " << test << " then " << then_expr << " else " << else_expr;
     }
-    virtual bool operator==(const base* o) const override {
-        auto cast = dynamic_cast<const if_then_else*>(o);
-        return cast && test == cast->test && then_expr == cast->then_expr &&
-               else_expr == cast->else_expr;
-    }
-    const std::unique_ptr<ast::base> test;
-    const std::unique_ptr<ast::base> then_expr;
-    const std::unique_ptr<ast::base> else_expr;
+    const ast::node test;
+    const ast::node then_expr;
+    const ast::node else_expr;
 };
 } // namespace ast
 

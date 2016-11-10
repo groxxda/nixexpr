@@ -23,7 +23,7 @@ struct base {
     base() = default;
     base(const base&) = delete;
     void operator=(const base&) = delete;
-    std::unique_ptr<ast::base> value;
+    std::unique_ptr<ast::node> value;
 
     void success(base& in_result) {
         assert(!in_result.value);
@@ -33,24 +33,22 @@ struct base {
 };
 
 struct any_string : base {
-    std::vector<std::unique_ptr<ast::base>> data;
+    std::vector<ast::node> data;
     std::string unescaped;
 
     void push_back() {
         assert(!value);
-        data.push_back(
-            std::make_unique<ast::string_literal>(std::move(unescaped)));
+        data.emplace_back(ast::string_literal(std::move(unescaped)));
         unescaped = std::string();
     }
 
     void push_back_expr() {
         if(unescaped.length()) {
-            data.push_back(
-                std::make_unique<ast::string_literal>(std::move(unescaped)));
+            data.emplace_back(ast::string_literal(std::move(unescaped)));
             unescaped = std::string();
         }
         assert(value);
-        data.push_back(std::make_unique<ast::dollar_curly>(std::move(value)));
+        data.emplace_back(ast::dollar_curly(std::move(value)));
     }
 };
 
@@ -58,7 +56,8 @@ struct string : any_string {
     void success(base& in_result) {
         assert(!value);
         assert(!in_result.value);
-        in_result.value = std::make_unique<ast::short_string>(std::move(data));
+        in_result.value =
+            std::make_unique<ast::node>(ast::short_string(std::move(data)));
     }
 };
 
@@ -72,8 +71,8 @@ struct long_string : any_string {
     void success(base& in_result) {
         assert(!value);
         assert(!in_result.value);
-        in_result.value =
-            std::make_unique<ast::long_string>(std::move(data), prefix_len);
+        in_result.value = std::make_unique<ast::node>(
+            ast::long_string(std::move(data), prefix_len));
     }
 };
 
@@ -81,13 +80,13 @@ template <typename T> struct binary_expression : base {
     void success(base& in_result) {
         assert(in_result.value);
         assert(value);
-        in_result.value =
-            std::make_unique<T>(std::move(in_result.value), std::move(value));
+        in_result.value = std::make_unique<ast::node>(
+            T(std::move(in_result.value), std::move(value)));
     }
 };
 
 struct lookup : base {
-    std::unique_ptr<ast::base> path;
+    std::unique_ptr<ast::node> path;
 
     void set_path() {
         assert(value);
@@ -98,14 +97,20 @@ struct lookup : base {
     void success(base& in_result) {
         assert(in_result.value);
         assert(path);
-        in_result.value = std::make_unique<ast::lookup>(
-            std::move(in_result.value), std::move(path), std::move(value));
+        if(value) {
+            in_result.value = std::make_unique<ast::node>(ast::lookup_or(
+                std::move(in_result.value), std::move(path), std::move(value)));
+
+        } else {
+            in_result.value = std::make_unique<ast::node>(
+                ast::lookup(std::move(in_result.value), std::move(path)));
+        }
     }
 };
 
 struct if_then_else : base {
-    std::unique_ptr<ast::base> test;
-    std::unique_ptr<ast::base> then_expr;
+    std::unique_ptr<ast::node> test;
+    std::unique_ptr<ast::node> then_expr;
 
     void set_test() {
         assert(value);
@@ -125,14 +130,14 @@ struct if_then_else : base {
         assert(test);
         assert(then_expr);
         assert(value);
-        in_result.value = std::make_unique<ast::if_then_else>(
-            std::move(test), std::move(then_expr), std::move(value));
+        in_result.value = std::make_unique<ast::node>(ast::if_then_else(
+            std::move(test), std::move(then_expr), std::move(value)));
     }
 };
 
 struct binding_inherit : base {
-    std::unique_ptr<ast::base> from;
-    std::vector<std::unique_ptr<ast::base>> attrs;
+    std::unique_ptr<ast::node> from;
+    std::vector<ast::node> attrs;
 
     void set_from() {
         assert(value);
@@ -141,62 +146,70 @@ struct binding_inherit : base {
 
     void push_back() {
         assert(value);
-        attrs.push_back(std::move(value));
+        attrs.push_back(std::move(*value.release()));
     }
 
     void success(base& in_result) {
         assert(!in_result.value);
         assert(!value);
-        in_result.value = std::make_unique<ast::binding_inherit>(
-            std::move(from), std::move(attrs));
+        if(from) {
+            in_result.value = std::make_unique<ast::node>(
+                ast::binding_inherit_from(std::move(from), std::move(attrs)));
+        } else {
+            in_result.value = std::make_unique<ast::node>(
+                ast::binding_inherit(std::move(attrs)));
+        }
     }
 };
 
 struct binds : base {
-    std::vector<std::unique_ptr<ast::base>> data;
+    std::vector<ast::node> data;
 
     void push_back() {
         assert(value);
-        assert(dynamic_cast<ast::binding_eq*>(value.get()) ||
-               dynamic_cast<ast::binding_inherit*>(value.get()));
-        data.push_back(std::move(value));
+        //        assert(dynamic_cast<ast::binding_eq*>(value.get()) ||
+        //               dynamic_cast<ast::binding_inherit*>(value.get()));
+        data.push_back(std::move(*value.release()));
     }
 
     void success(base& in_result) {
         assert(!value);
         assert(!in_result.value);
-        in_result.value = std::make_unique<ast::binds>(std::move(data));
+        in_result.value =
+            std::make_unique<ast::node>(ast::binds(std::move(data)));
     }
 };
 
 struct formals : base {
-    std::vector<std::unique_ptr<ast::base>> data;
+    std::vector<ast::node> data;
 
     void push_back() {
         assert(value);
         // assert(std::dynamic_pointer_cast<ast::formal>(value));
-        data.push_back(std::move(value));
+        data.push_back(std::move(*value.release()));
     }
 
     void success(base& in_result) {
         assert(!value);
         assert(!in_result.value);
-        in_result.value = std::make_unique<ast::formals>(std::move(data));
+        in_result.value =
+            std::make_unique<ast::node>(ast::formals(std::move(data)));
     }
 };
 
 struct array : base {
-    std::vector<std::unique_ptr<ast::base>> data;
+    std::vector<ast::node> data;
 
     void push_back() {
         assert(value);
-        data.push_back(std::move(value));
+        data.push_back(std::move(*value.release()));
     };
 
     void success(base& in_result) {
         assert(!in_result.value);
         assert(!value);
-        in_result.value = std::make_unique<ast::array>(std::move(data));
+        in_result.value =
+            std::make_unique<ast::node>(ast::array(std::move(data)));
     }
 };
 } // namespace state
@@ -775,7 +788,7 @@ template <typename Rules> struct formals : action<Rules> {};
 template <> struct formals<keyword::key_ellipsis> {
     template <typename Input>
     static void apply(const Input& in, state::formals& state) {
-        state.value = std::make_unique<ast::ellipsis>();
+        state.value = std::make_unique<ast::node>(ast::ellipsis());
         state.push_back();
     }
 };
@@ -941,7 +954,8 @@ template <> struct action<number> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
-        state.value = std::make_unique<ast::number>(std::stoll(in.string()));
+        state.value =
+            std::make_unique<ast::node>(ast::number(std::stoll(in.string())));
     }
 };
 
@@ -949,11 +963,11 @@ template <> struct action<uri> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
-        std::vector<std::unique_ptr<ast::base>> vec;
-        auto lit =
-            std::make_unique<ast::string_literal>(std::move(in.string()));
-        vec.push_back(std::move(lit));
-        state.value = std::make_unique<ast::short_string>(std::move(vec));
+        std::vector<ast::node> vec;
+        auto lit = ast::string_literal(std::move(in.string()));
+        vec.emplace_back(std::move(lit));
+        state.value =
+            std::make_unique<ast::node>(ast::short_string(std::move(vec)));
     }
 };
 
@@ -961,7 +975,7 @@ template <> struct action<name> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
-        state.value = std::make_unique<ast::name>(in.string());
+        state.value = std::make_unique<ast::node>(ast::name(in.string()));
     }
 };
 
@@ -969,7 +983,7 @@ template <> struct action<path> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
-        state.value = std::make_unique<ast::path>(in.string());
+        state.value = std::make_unique<ast::node>(ast::path(in.string()));
     }
 };
 
@@ -977,7 +991,7 @@ template <> struct action<spath> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
-        state.value = std::make_unique<ast::spath>(in.string());
+        state.value = std::make_unique<ast::node>(ast::spath(in.string()));
     }
 };
 
@@ -985,7 +999,7 @@ template <> struct action<keyword::key_true> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
-        state.value = std::make_unique<ast::boolean>(true);
+        state.value = std::make_unique<ast::node>(ast::boolean(true));
     }
 };
 
@@ -993,7 +1007,7 @@ template <> struct action<keyword::key_false> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(!state.value);
-        state.value = std::make_unique<ast::boolean>(false);
+        state.value = std::make_unique<ast::node>(ast::boolean(false));
     }
 };
 
@@ -1001,7 +1015,8 @@ template <> struct action<expr_not_val> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(state.value);
-        state.value = std::make_unique<ast::not_>(std::move(state.value));
+        state.value =
+            std::make_unique<ast::node>(ast::not_(std::move(state.value)));
     }
 };
 
@@ -1009,7 +1024,8 @@ template <> struct action<expr_negate_val> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(state.value);
-        state.value = std::make_unique<ast::negate>(std::move(state.value));
+        state.value =
+            std::make_unique<ast::node>(ast::negate(std::move(state.value)));
     }
 };
 
@@ -1017,8 +1033,8 @@ template <> struct action<table_apply<table_begin_nonrecursive>> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(state.value);
-        state.value =
-            std::make_unique<ast::table>(std::move(state.value), false);
+        state.value = std::make_unique<ast::node>(
+            ast::table(std::move(state.value), false));
     }
 };
 
@@ -1026,8 +1042,8 @@ template <> struct action<table_apply<table_begin_recursive>> {
     template <typename Input>
     static void apply(const Input& in, state::base& state) {
         assert(state.value);
-        state.value =
-            std::make_unique<ast::table>(std::move(state.value), true);
+        state.value = std::make_unique<ast::node>(
+            ast::table(std::move(state.value), true));
     }
 };
 
