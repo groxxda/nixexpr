@@ -33,7 +33,7 @@ bool parse(Str&& str, Args&&... args) {
 
 template <typename R> R compare(nix::parser::state::base& state) {
     std::stringstream s;
-    s << *state.value;
+    s << state.value;
     R r;
     s >> r;
     return r;
@@ -41,7 +41,7 @@ template <typename R> R compare(nix::parser::state::base& state) {
 
 template <> std::string compare(nix::parser::state::base& state) {
     std::stringstream s;
-    s << *state.value;
+    s << state.value;
     return s.str();
 }
 
@@ -60,7 +60,7 @@ template <typename S> void check(S&& str) { check<>(str, str); }
     SECTION(expr) {                                                            \
         nix::parser::state::base result;                                       \
         REQUIRE(parse(expr, result));                                          \
-        REQUIRE(ast == *result.value);                                         \
+        REQUIRE(ast == result.value);                                          \
     }
 
 

@@ -16,12 +16,14 @@ class node {
     };
 
     template <typename T> struct node_impl : node_interface {
-        node_impl(T t) : object(std::move(t)) {}
+        template <typename... N>
+        node_impl(N&&... n) : object(std::forward<N>(n)...) {}
+
         virtual ~node_impl() = default;
-        virtual void stream(std::ostream& o) const override {
+        inline virtual void stream(std::ostream& o) const override {
             object.stream(o);
         }
-        virtual bool operator==(const node_interface& o) const override {
+        inline virtual bool operator==(const node_interface& o) const override {
             const node_impl<T>* oc = dynamic_cast<const node_impl<T>*>(&o);
             if(!oc) return false;
             return object == oc->object;
@@ -31,14 +33,42 @@ class node {
         const T object;
     };
 
-    std::shared_ptr<node_interface> object;
+    std::unique_ptr<const node_interface> object;
+
+
+    explicit node(std::unique_ptr<node_interface>&& impl)
+        : object(std::move(impl)) {}
 
 public:
-    template <typename T>
-    explicit node(const T& t) : object(new node_impl<T>(t)) {}
-    void stream(std::ostream& o) const { object->stream(o); }
-    bool operator==(const node& o) const { return *object == *o.object; }
+    explicit node() : object(nullptr){};
+    node(const node&) = delete;
+    node(node&&) = default;
+
+    inline void stream(std::ostream& o) const { object->stream(o); }
+    inline bool operator==(const node& o) const { return *object == *o.object; }
+    inline operator bool() const { return object.operator bool(); }
+
+    inline void swap(node& l, node& r) noexcept {
+        using std::swap;
+        swap(l.object, r.object);
+    }
+
+    inline node& operator=(node o) {
+        swap(*this, o);
+        return *this;
+    }
+
+    inline void reset() { object.reset(); }
+
+    template <typename T, typename... Args>
+    friend node make_node(Args&&... args);
 };
+
+template <typename T, typename... Args> node make_node(Args&&... args) {
+    std::unique_ptr<node::node_interface> ptr =
+        std::make_unique<node::node_impl<T>>(std::forward<Args>(args)...);
+    return node(std::move(ptr));
+}
 
 inline std::ostream& operator<<(std::ostream& o, const node& b) {
     b.stream(o);
@@ -124,10 +154,8 @@ struct ellipsis {
 
 template <char op> struct unary_expression {
     explicit unary_expression(ast::node&& value) : value(std::move(value)) {}
-    explicit unary_expression(std::unique_ptr<ast::node>&& ptr)
-        : value(*ptr.release()) {}
     void stream(std::ostream& o) const { o << op << value; }
-    const ast::node value;
+    const node value;
 };
 
 struct not_ : public unary_expression<'!'> {
@@ -149,10 +177,6 @@ struct dollar_curly : public unary_expression<'$'> {
 template <char... op> struct binary_expression {
     explicit binary_expression(ast::node&& lhs, ast::node&& rhs)
         : lhs(std::move(lhs)), rhs(std::move(rhs)) {}
-    explicit binary_expression(std::unique_ptr<ast::node>&& lhs,
-                               std::unique_ptr<ast::node>&& rhs)
-        : binary_expression<op...>(std::move(*lhs.release()),
-                                   std::move(*rhs.release())) {}
     void stream(std::ostream& o) const {
         o << "(" << lhs;
         (o << ... << op) << rhs << ")";
@@ -268,12 +292,6 @@ struct lookup : public binary_expression<'.'> {
 struct lookup_or {
     explicit lookup_or(ast::node&& from, ast::node&& path, ast::node&& or_)
         : from(std::move(from)), path(std::move(path)), or_(std::move(or_)) {}
-    explicit lookup_or(std::unique_ptr<ast::node>&& from,
-                       std::unique_ptr<ast::node>&& path,
-                       std::unique_ptr<ast::node>&& or_)
-        : lookup_or(std::move(*from.release()),
-                    std::move(*path.release()),
-                    std::move(*or_.release())) {}
 
     void stream(std::ostream& o) const {
         o << from << "." << path << " or " << or_;
@@ -317,9 +335,6 @@ struct binding_inherit_from {
     explicit binding_inherit_from(ast::node&& from,
                                   std::vector<ast::node>&& attrs)
         : from(std::move(from)), attrs(std::move(attrs)){};
-    explicit binding_inherit_from(std::unique_ptr<ast::node>&& from,
-                                  std::vector<ast::node>&& attrs)
-        : binding_inherit_from(std::move(*from.release()), std::move(attrs)) {}
     bool operator==(const binding_inherit_from& o) const {
         return from == o.from && attrs == o.attrs;
     }
@@ -371,8 +386,6 @@ struct named_formals : public binary_expression<'@'> {
 struct table {
     explicit table(ast::node&& data, bool recursive)
         : binds(std::move(data)), recursive(recursive) {}
-    explicit table(std::unique_ptr<ast::node>&& data, bool recursive)
-        : table(std::move(*data.release()), recursive) {}
     bool operator==(const table& o) const {
         return binds == o.binds && recursive == o.recursive;
     }
@@ -431,12 +444,6 @@ struct if_then_else {
                           ast::node&& else_expr)
         : test(std::move(test)), then_expr(std::move(then_expr)),
           else_expr(std::move(else_expr)) {}
-    explicit if_then_else(std::unique_ptr<ast::node>&& test,
-                          std::unique_ptr<ast::node>&& then_expr,
-                          std::unique_ptr<ast::node>&& else_expr)
-        : if_then_else(std::move(*test.release()),
-                       std::move(*then_expr.release()),
-                       std::move(*else_expr.release())) {}
     bool operator==(const if_then_else& o) const {
         return test == o.test && then_expr == o.then_expr &&
                else_expr == o.else_expr;
