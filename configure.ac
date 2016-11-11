@@ -3,7 +3,7 @@ AC_CONFIG_HEADERS([config.h])
 
 #AC_CONFIG_MACRO_DIRS([m4])
 
-AM_INIT_AUTOMAKE([1.11 foreign subdir-objects])
+AM_INIT_AUTOMAKE([1.11 foreign subdir-objects silent-rules])
 
 AM_PROG_AR
 AC_PROG_RANLIB
